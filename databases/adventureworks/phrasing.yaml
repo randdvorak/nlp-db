@@ -377,6 +377,10 @@ fact_weights:
   vendors: 0.6
 new_fact_weight: 0.45
 
+# Keep questions that group a fact by its own entity ("products by number of products"); round 5
+# was trained with them, so this keeps its data byte-identical.
+skip_own_entity: false
+
 # Facts with a date that questions do not put a time window on.
 no_time_facts: [employees]
 

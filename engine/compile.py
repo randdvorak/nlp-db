@@ -128,7 +128,12 @@ def filter_sql(f, fact):
         if not flag:
             raise PlanError(f"unknown flag '{f['flag']}'")
         return flag["sql"]
-    name, op = f["dim"], f.get("op", "=").lower()
+    name, op = f.get("dim"), f.get("op")
+    if not isinstance(name, str):
+        raise PlanError("filter needs a dim or a flag")
+    if not isinstance(op, str):
+        raise PlanError(f"filter on '{name}' needs an op")
+    op = op.lower()
     if op not in OPS:
         raise PlanError(f"unknown operator '{op}'")
     d = CAT["dimensions"].get(name)
@@ -138,9 +143,15 @@ def filter_sql(f, fact):
     if op in ("is null", "is not null"):
         return f"{col} {op.upper()}"
     v = f.get("value")
+    if v is None:
+        raise PlanError(f"'{op}' filter on '{name}' needs a value")
     if op in ("in", "not in"):
+        if not isinstance(v, list) or not v:
+            raise PlanError(f"'{op}' needs a list")
         return f"{col} {op.upper()} (" + ", ".join(lit(filter_value(name, x)) for x in v) + ")"
     if op == "between":
+        if not isinstance(v, list) or len(v) < 2:
+            raise PlanError("'between' needs two values")
         return f"{col} BETWEEN {lit(v[0])} AND {lit(v[1])}"
     if op == "like":
         return f"{col} ILIKE {lit('%' + str(v) + '%')}"

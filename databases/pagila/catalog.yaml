@@ -1,0 +1,420 @@
+# Drafted by engine/profile_db.py from dbname=pagila. Review before training:
+#  - say: the words people use for each fact, measure, dimension and flag (the draft only has
+#    what the column names say)
+#  - facts: drop the ones nobody asks about; name money measures the way people do ("revenue")
+#  - dimensions: kind text are shown in lists only; lookup values come from the database live
+#  - joins marked "one-to-one in today's data" assume each parent row has at most one child row
+#  - lookup.context: dimensions whose values are everyday words ("Day" shift), matched only
+#    next to a word naming them; lookup.skip: never matched
+# python3 coverage.py --project ../databases/pagila lists columns that are neither used nor excluded.
+
+project:
+  name: Pagila
+  conninfo: dbname=pagila
+  model_file: pagila-plans.gguf
+  schemas: [public]
+lookup:
+  skip: [store]
+  context: []
+  common_words: []
+nodes:
+  actor: public.actor
+  address: public.address
+  category: public.category
+  city: public.city
+  country: public.country
+  customer: public.customer
+  film: public.film
+  film_actor: public.film_actor
+  film_category: public.film_category
+  inventory: public.inventory
+  language: public.language
+  payment: public.payment
+  rental: public.rental
+  staff: public.staff
+  store: public.store
+  original_language: public.language
+role_nodes: [original_language]
+joins:
+- [customer, address, customer.address_id = address.address_id]
+- [customer, store, customer.store_id = store.store_id]
+- [film, language, film.language_id = language.language_id]
+- [film, original_language, film.original_language_id = original_language.language_id, optional]
+- [film_actor, actor, film_actor.actor_id = actor.actor_id]
+- [film_actor, film, film_actor.film_id = film.film_id]
+- [film_category, category, film_category.category_id = category.category_id]
+- [film_category, film, film_category.film_id = film.film_id]
+- [address, city, address.city_id = city.city_id]
+- [city, country, city.country_id = country.country_id]
+- [inventory, film, inventory.film_id = film.film_id]
+- [inventory, store, inventory.store_id = store.store_id]
+- [payment, customer, payment.customer_id = customer.customer_id]
+- [payment, rental, payment.rental_id = rental.rental_id]
+- [payment, staff, payment.staff_id = staff.staff_id]
+- [rental, customer, rental.customer_id = customer.customer_id]
+- [rental, inventory, rental.inventory_id = inventory.inventory_id]
+- [rental, staff, rental.staff_id = staff.staff_id]
+- [staff, address, staff.address_id = address.address_id]
+- [staff, store, staff.store_id = store.store_id]
+- [store, address, store.address_id = address.address_id]
+facts:
+  actors:
+    base: actor
+    describe: one row per actor
+    measures:
+      actor_count:
+        sql: COUNT(*)
+        say: [number of actors, how many actors]
+  addresses:
+    base: address
+    describe: one row per address
+    list:
+      entity: address
+      attrs: [address2, address_district, address_postal_code, address_phone]
+    measures:
+      address_count:
+        sql: COUNT(*)
+        say: [number of addresses, how many addresses]
+  categories:
+    base: category
+    describe: one row per category
+    measures:
+      category_count:
+        sql: COUNT(*)
+        say: [number of categories, how many categories]
+  cities:
+    base: city
+    describe: one row per city
+    measures:
+      city_count:
+        sql: COUNT(*)
+        say: [number of cities, how many cities]
+  countries:
+    base: country
+    describe: one row per country
+    measures:
+      country_count:
+        sql: COUNT(*)
+        say: [number of countries, how many countries]
+  customers:
+    base: customer
+    date: customer.create_date
+    describe: one row per customer
+    list:
+      entity: customer
+      attrs: [customer_email, customer_create_date, customer_active_2]
+    measures:
+      customer_count:
+        sql: COUNT(*)
+        say: [number of customers, how many customers]
+      total_active:
+        sql: SUM(customer.active)
+        say: [total active]
+      avg_active:
+        sql: AVG(customer.active)
+        say: [average active]
+  films:
+    base: film
+    describe: one row per film
+    list:
+      entity: film
+      attrs:
+      - film_description
+      - film_release_year
+      - film_rental_duration
+      - film_rental_rate
+      - film_length
+      - film_replacement_cost
+      - film_rating
+    measures:
+      film_count:
+        sql: COUNT(*)
+        say: [number of films, how many films]
+      total_rental_duration:
+        sql: SUM(film.rental_duration)
+        say: [total rental duration]
+      avg_rental_duration:
+        sql: AVG(film.rental_duration)
+        say: [average rental duration]
+      total_rental_rate:
+        sql: SUM(film.rental_rate)
+        say: [total rental rate]
+      avg_rental_rate:
+        sql: AVG(film.rental_rate)
+        say: [average rental rate]
+      total_length:
+        sql: SUM(film.length)
+        say: [total length]
+      avg_length:
+        sql: AVG(film.length)
+        say: [average length]
+      total_replacement_cost:
+        sql: SUM(film.replacement_cost)
+        say: [total replacement cost]
+      avg_replacement_cost:
+        sql: AVG(film.replacement_cost)
+        say: [average replacement cost]
+  film_actors:
+    base: film_actor
+    describe: one row per film actor
+    measures:
+      film_actor_count:
+        sql: COUNT(*)
+        say: [number of film actors, how many film actors]
+  film_categories:
+    base: film_category
+    describe: one row per film category
+    measures:
+      film_category_count:
+        sql: COUNT(*)
+        say: [number of film categories, how many film categories]
+  inventories:
+    base: inventory
+    describe: one row per inventory
+    measures:
+      inventory_count:
+        sql: COUNT(*)
+        say: [number of inventories, how many inventories]
+  languages:
+    base: language
+    describe: one row per language
+    measures:
+      language_count:
+        sql: COUNT(*)
+        say: [number of languages, how many languages]
+  payments:
+    base: payment
+    date: payment.payment_date
+    describe: one row per payment
+    measures:
+      payment_count:
+        sql: COUNT(*)
+        say: [number of payments, how many payments]
+      total_amount:
+        sql: SUM(payment.amount)
+        say: [total amount]
+      avg_amount:
+        sql: AVG(payment.amount)
+        say: [average amount]
+  rentals:
+    base: rental
+    date: rental.rental_date
+    describe: one row per rental
+    measures:
+      rental_count:
+        sql: COUNT(*)
+        say: [number of rentals, how many rentals]
+  staffs:
+    base: staff
+    describe: one row per staff
+    list:
+      entity: staff
+      attrs: [staff_email, staff_username]
+    measures:
+      staff_count:
+        sql: COUNT(*)
+        say: [number of staffs, how many staffs]
+  stores:
+    base: store
+    describe: one row per store
+    list:
+      entity: store
+      attrs: [store_manager_staff_id]
+    measures:
+      store_count:
+        sql: COUNT(*)
+        say: [number of stores, how many stores]
+      total_manager_staff_id:
+        sql: SUM(store.manager_staff_id)
+        say: [total manager staff id]
+      avg_manager_staff_id:
+        sql: AVG(store.manager_staff_id)
+        say: [average manager staff id]
+dimensions:
+  actor:
+    node: actor
+    sql: actor.first_name || ' ' || actor.last_name
+    say: [actor]
+  address:
+    node: address
+    sql: address.address
+    say: [address]
+  address2:
+    node: address
+    sql: address.address2
+    say: [address2]
+  address_district:
+    node: address
+    sql: address.district
+    say: [address district, district]
+    kind: text
+  address_postal_code:
+    node: address
+    sql: address.postal_code
+    say: [address postal code, postal code]
+    kind: text
+  address_phone:
+    node: address
+    sql: address.phone
+    say: [address phone, phone]
+    kind: text
+  category:
+    node: category
+    sql: category.name
+    say: [category]
+  city:
+    node: city
+    sql: city.city
+    say: [city]
+  country:
+    node: country
+    sql: country.country
+    say: [country]
+  customer:
+    node: customer
+    sql: customer.first_name || ' ' || customer.last_name
+    say: [customer]
+  customer_email:
+    node: customer
+    sql: customer.email
+    say: [customer email, email]
+    kind: text
+  customer_create_date:
+    node: customer
+    sql: customer.create_date
+    say: [customer create date, create date]
+    kind: date
+  customer_active_2:
+    node: customer
+    sql: customer.active
+    say: [customer active, active]
+    kind: number
+  film:
+    node: film
+    sql: film.title
+    say: [film]
+  film_description:
+    node: film
+    sql: film.description
+    say: [film description, description]
+    kind: text
+  film_release_year:
+    node: film
+    sql: film.release_year
+    say: [film release year, release year]
+    kind: number
+  film_rental_duration:
+    node: film
+    sql: film.rental_duration
+    say: [film rental duration, rental duration]
+    kind: number
+  film_rental_rate:
+    node: film
+    sql: film.rental_rate
+    say: [film rental rate, rental rate]
+    kind: number
+  film_length:
+    node: film
+    sql: film.length
+    say: [film length, length]
+    kind: number
+  film_replacement_cost:
+    node: film
+    sql: film.replacement_cost
+    say: [film replacement cost, replacement cost]
+    kind: number
+  film_rating:
+    node: film
+    sql: film.rating
+    say: [film rating, rating]
+    values: [G, PG, PG-13, R, NC-17]
+  language:
+    node: language
+    sql: language.name
+    say: [language]
+  payment_amount:
+    node: payment
+    sql: payment.amount
+    say: [payment amount, amount]
+    kind: number
+  payment_date:
+    node: payment
+    sql: payment.payment_date
+    say: [payment date]
+    kind: date
+  rental_date:
+    node: rental
+    sql: rental.rental_date
+    say: [rental date]
+    kind: date
+  rental_return_date:
+    node: rental
+    sql: rental.return_date
+    say: [rental return date, return date]
+    kind: date
+  staff:
+    node: staff
+    sql: staff.first_name || ' ' || staff.last_name
+    say: [staff]
+  staff_email:
+    node: staff
+    sql: staff.email
+    say: [staff email, email]
+    kind: text
+  staff_username:
+    node: staff
+    sql: staff.username
+    say: [staff username, username]
+    kind: text
+  store:
+    node: store
+    sql: store.store_id
+    say: [store]
+  store_manager_staff_id:
+    node: store
+    sql: store.manager_staff_id
+    say: [store manager staff id, manager staff id]
+    kind: number
+  original_language:
+    node: original_language
+    sql: original_language.name
+    say: [original language]
+flags:
+  customer_active:
+    node: customer
+    sql: customer.activebool
+    say: [active customers, active]
+  staff_active:
+    node: staff
+    sql: staff.active
+    say: [active staffs, active]
+time:
+  grains:
+    year: EXTRACT(YEAR FROM {d})::int
+    quarter: EXTRACT(QUARTER FROM {d})::int
+    month: DATE_TRUNC('month', {d})::date
+    day: '{d}::date'
+  periods:
+    today: '{d} >= CURRENT_DATE AND {d} < CURRENT_DATE + 1'
+    this_month: '{d} >= DATE_TRUNC(''month'', CURRENT_DATE) AND {d} < CURRENT_DATE + 1'
+    last_month: '{d} >= DATE_TRUNC(''month'', CURRENT_DATE) - INTERVAL ''1 month'' AND {d} < DATE_TRUNC(''month'', CURRENT_DATE)'
+    this_quarter: '{d} >= DATE_TRUNC(''quarter'', CURRENT_DATE) AND {d} < CURRENT_DATE + 1'
+    last_quarter: '{d} >= DATE_TRUNC(''quarter'', CURRENT_DATE) - INTERVAL ''3 months'' AND {d} < DATE_TRUNC(''quarter'', CURRENT_DATE)'
+    this_year: '{d} >= DATE_TRUNC(''year'', CURRENT_DATE) AND {d} < CURRENT_DATE + 1'
+    last_year: '{d} >= DATE_TRUNC(''year'', CURRENT_DATE) - INTERVAL ''1 year'' AND {d} < DATE_TRUNC(''year'', CURRENT_DATE)'
+    past_days: '{d} >= CURRENT_DATE - INTERVAL ''{n} days'' AND {d} < CURRENT_DATE + 1'
+    past_months: '{d} >= CURRENT_DATE - INTERVAL ''{n} months'' AND {d} < CURRENT_DATE + 1'
+    year: '{d} >= DATE ''{n}-01-01'' AND {d} < DATE ''{n}-01-01'' + INTERVAL ''1 year'''
+    between: '{d} >= DATE ''{from}'' AND {d} < DATE ''{to}'' + 1'
+not_tracked: [the question is not about the Pagila data]
+excluded:
+  '*.last_update': row edit timestamp, no business meaning
+  public.customer.uuid: 'uuid: not something questions filter or group by'
+  public.film.special_features: 'text[]: not something questions filter or group by'
+  public.film.fulltext: 'tsvector: not something questions filter or group by'
+  public.film.length_hours: 'numeric generated: not something questions filter or group by'
+  public.payment.payment_id: key with no business meaning
+  public.payment.uuid: 'uuid: not something questions filter or group by'
+  public.rental.uuid: 'uuid: not something questions filter or group by'
+  public.staff.password: secret (security)
+  public.staff.picture: 'bytea: not something questions filter or group by'

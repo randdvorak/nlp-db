@@ -1,0 +1,751 @@
+# How people ask about AdventureWorks. engine/gen_plans.py reads this to write training questions;
+# every key is optional and falls back to generic wording. Nothing here is a database value:
+# filter values in training are made up (made_up_values at the end).
+
+# Plurals the simple English rules get wrong.
+plural:
+  sales person: sales people
+  sales rep: sales reps
+  staff member: staff
+  salesperson: salespeople
+  SKU: SKUs
+  country: countries
+  class: classes
+
+# Question forms per measure; {x} is the rest of the question (filters, time).
+ask:
+  order_count:
+  - how many orders {x}
+  - number of orders {x}
+  - count the orders {x}
+  - how many sales orders were placed {x}
+  - order count {x}
+  customer_count:
+  - how many customers {x}
+  - number of customers {x}
+  - how many distinct customers bought {x}
+  - count of customers {x}
+  units_sold: ['how many units were sold {x}', 'units sold {x}', 'total quantity sold {x}', 'how many did we sell {x}']
+  po_count: ['how many purchase orders {x}', 'number of purchase orders {x}', 'count of POs {x}']
+  work_order_count: ['how many work orders {x}', 'number of work orders {x}']
+  product_count:
+  - how many products {x}
+  - number of products {x}
+  - count the products {x}
+  - how many items do we have {x}
+  headcount: ['how many employees {x}', 'headcount {x}', 'number of staff {x}', 'how many people work {x}']
+  vendor_count: ['how many vendors {x}', 'number of suppliers {x}', 'how many vendors do we have {x}']
+  units_built: ['how many units were built {x}', 'quantity manufactured {x}']
+  units_scrapped: ['how many units were scrapped {x}', 'scrapped quantity {x}']
+  avg_rating: ['what''s the average rating {x}', 'average review score {x}', 'how are our products rated {x}']
+  avg_age: ['what is the average age of employees {x}', 'how old are our employees on average {x}']
+  resource_hours: ['machine hours {x}', 'how many resource hours were used {x}']
+  pay_change_count: ['how many pay raises were given {x}', 'number of pay changes {x}']
+  stock_on_hand: ['how much stock do we have {x}', 'inventory on hand {x}', 'units in stock {x}', 'how many are in stock {x}']
+
+# Phrases per flag. Without an entry the flag's `say` words are used.
+flag_words:
+  online: [online, placed online, from the website, from internet sales, through the web store]
+  reseller: [through resellers, from resellers, placed by sales reps, in the reseller channel]
+  discounted: [sold at a discount, with a discount, on discounted lines]
+  currently_sold: [that are still sold, currently for sale, still on sale, that are active]
+  no_longer_sold: [that are no longer sold, that were discontinued, no longer for sale]
+  salable: [that are finished goods, that are salable]
+  made_in_house: [that we manufacture, made in-house, that we make ourselves]
+  bought_in: [that we buy in, that are purchased, bought from vendors]
+  store_customer: [from store customers, for store customers, from resellers' stores, for business customers]
+  individual_customer: [from individual customers, for individual customers, from consumers, from retail customers]
+  salaried: [who are salaried, on salary, salaried]
+  hourly: [who are hourly, paid hourly, hourly]
+  preferred_vendor: [that are preferred vendors, from preferred vendors, with preferred status]
+  active_vendor: [that are active, still in use, that are active vendors]
+  has_scrap: [that had scrap, with scrapped units, that had failures]
+  has_rejects: [with rejected items, that had rejects]
+  shipped_late: [that shipped late, shipped after the due date, that were late]
+  foreign_currency: [paid in a foreign currency, in currencies other than dollars]
+  paid_by_card: [paid by credit card, paid with a card]
+  active_offer: [that are running now, currently active, that are still running]
+  current_employee: [who are current employees, still employed]
+  homeowner: [who own their home, who are homeowners]
+  hired_candidate: [who were hired, that we hired]
+  current_assignment: [currently assigned, in their current territory]
+  past_department: [in departments they have left, in previous departments]
+  current_bom: [still in use, in the current bill of materials]
+  current_cost: [at the current cost, for the current cost]
+  current_price: [at the current price, for the current price]
+  archived: [in the archive, that are archived]
+  late_work_order: [that finished late, completed after the due date]
+  delayed_operation: [that ran late, behind schedule]
+  is_folder: [that are folders]
+  is_file: [that are actual documents, 'that are files, not folders']
+  has_instructions: [with manufacturing instructions, that have assembly instructions]
+  has_catalog_description: [with a catalog description]
+  primary_address: [for main addresses, for primary addresses]
+
+# Phrases per filter dimension: {v} is the value, {lv} the value in lower case.
+filter_words:
+  territory: ['in {v}', 'for {v}', 'in {v}', 'within {v}', 'in the {v} territory']
+  territory_group: ['in {v}', 'for {v}', 'in {v}', 'within {v}', 'across {v}']
+  ship_country: ['shipped to {v}', 'delivered to {v}', 'going to {v}', 'in {v}', 'for {v}', 'in {v}', 'within {v}']
+  ship_state: ['shipped to {v}', 'delivered to {v}', 'in {v}', 'for {v}', 'in {v}', 'within {v}']
+  ship_city: ['shipped to {v}', 'in {v}', 'delivered to {v}']
+  category: ['for {v}', 'in the {v} category', 'for {v} products', 'in {v}']
+  subcategory: ['for {v}', 'for {v} products', 'in the {v} subcategory']
+  color: ['for {v} products', 'that are {lv}', 'in {lv}', 'colored {lv}']
+  product: ['for {v}', 'for the product {v}', 'of {v}']
+  model: ['for model {v}', 'for the {v} model']
+  product_line: ['for the {v} line', 'for {v} products', 'in the {v} product line']
+  product_class: ['of class {v}', 'in the {v} class']
+  product_style: ['in the {v} style', 'for {lv} styles']
+  customer: ['for {v}', 'for customer {v}', 'bought by {v}']
+  store: ['for {v}', 'for the store {v}', 'from {v}']
+  customer_type: ['for {lv} customers', 'from {lv} customers']
+  channel: ['through the {lv} channel', 'in the {lv} channel']
+  ship_method: ['shipped by {v}', 'via {v}', 'sent with {v}']
+  sales_person: ['by {v}', 'for {v}', 'sold by {v}']
+  employee: ['for {v}', 'for employee {v}']
+  job_title: ['with the title {v}', 'who are {v}', 'in the {v} role']
+  department: ['in {v}', 'in the {v} department']
+  department_group: ['in the {v} group', 'in {v}']
+  shift: ['on the {lv} shift', 'working {lv} shift']
+  gender: ['who are {lv}', 'that are {lv}']
+  marital_status: ['who are {lv}', 'that are {lv}']
+  special_offer: ['under the {v} promotion', 'with the {v} offer']
+  offer_type: ['with {v}', 'under {v} offers', 'with offer type {v}']
+  vendor: ['from {v}', 'with vendor {v}', 'bought from {v}']
+  vendor_rating: ['with a {lv} credit rating', 'rated {lv}']
+  po_status: ['that are {lv}', 'with status {lv}']
+  scrap_reason: ['because of {v}', 'with scrap reason {v}', 'due to {lv}']
+  location: ['at {v}', 'in {v}', 'at the {v} location']
+  territory_country: ['in country {v}']
+  manager: ['who report to {v}', 'managed by {v}', 'reporting to {v}', 'under {v}']
+  assembly: ['that go into {v}', 'used in {v}', 'in the {v} assembly']
+  buyer: ['placed by {v}', 'bought by {v}', 'handled by buyer {v}']
+  sales_reason: ['because of {v}', 'citing {v}', 'where the reason was {v}']
+  card_type: ['paid with {v}', 'on {v} cards', 'with a {v} card']
+  currency: ['in {v}', 'paid in {v}', 'for the {v}']
+  customer_city: ['from customers in {v}', 'for customers living in {v}']
+  customer_state: ['from customers in {v}', 'for customers in {v}']
+  customer_country: ['from customers in {v}', 'for customers based in {v}']
+  vendor_city: ['from vendors in {v}', 'for suppliers in {v}']
+  vendor_state: ['from vendors in {v}', 'for suppliers based in {v}']
+  vendor_country: ['from vendors in {v}']
+  employee_city: ['who live in {v}', 'living in {v}']
+  employee_state: ['who live in {v}', 'based in {v}']
+  billing_city: ['billed to {v}', 'with a billing address in {v}']
+  billing_state: ['billed to {v}', 'with a billing address in {v}']
+  billing_country: ['billed to {v}', 'with a billing address in {v}']
+  yearly_income: ['with income {v}', 'earning {v}', 'in the {v} income bracket']
+  occupation: ['who work in {lv} jobs', 'with occupation {v}']
+  education: ['with education {v}', 'whose education is {v}']
+  customer_gender: ['who are {lv}', 'from {lv} customers']
+  customer_marital_status: ['who are {lv}', 'from {lv} customers']
+  commute_distance: ['with a commute of {v}', 'who commute {v}']
+  store_specialty: ['specializing in {v}', 'with specialty {v}']
+  store_business_type: ['that are a {lv}', 'of type {lv}']
+  pay_frequency: ['paid {lv}', 'on {lv} pay']
+  transaction_type: ['of type {lv}', 'for {lv} transactions']
+  document_status: ['that are {lv}', 'with status {lv}']
+  language: ['in {v}', 'written in {v}']
+  contact_type: ['who are {v}', 'with the role {v}', 'in the {v} role']
+  person_type: ['of type {lv}', 'who are a {lv}']
+  phone_type: ['with a {lv} phone', 'whose phone is a {lv} number']
+  address_type: ['for {lv} addresses', 'with address type {v}']
+  tax_type: ['for {lv} tax', 'of tax type {lv}']
+  order_status: ['that are {lv}', 'with status {lv}']
+  candidate_education: ['with a {lv} degree', 'educated to {v} level']
+  candidate_major: ['who studied {v}', 'with a major in {v}']
+  email_promotion: ['whose email preference is {v}', 'with email setting {v}']
+  offer_category: ['for the {v} category', 'with offer category {v}']
+  reason_type: ['with reason type {v}', 'for {lv} reasons']
+  contact: ['for {v}', 'for contact {v}']
+  person: ['for {v}', 'for the person {v}']
+  candidate: ['for {v}', 'for candidate {v}']
+  reviewer: ['by {v}', 'written by {v}']
+  document: ['for {v}', 'for the document {v}']
+  document_folder: ['in the {v} folder', 'under {v}']
+  warranty: ['with a {v} warranty']
+  size: ['in size {v}', 'of size {v}']
+  shelf: ['on shelf {v}']
+  tax_rate_name: ['for {v}']
+
+# Number dimensions that are identifiers: filtered with "=" on made-up ids, never ranges.
+id_dims:
+  order_number: ['for order {v}', 'on sales order {v}', 'of order number {v}']
+  po_number: ['on purchase order {v}', 'for PO {v}']
+  reference_order: ['for reference order {v}']
+  illustration: ['for illustration {v}']
+
+# Number dimensions never filtered by range (besides id_dims).
+no_range:
+- reference_line
+- order_revision
+- po_revision
+- operation_sequence
+- bin
+- org_level
+- change_number
+- store_year_opened
+- bom_level
+
+# Phrases for "is null" filters.
+null_words:
+  color: [with no color, without a color, that have no colour]
+  manager: [with no manager, who report to nobody]
+  size: [with no size, without a size]
+  tracking_number: [with no tracking number, without a tracking number]
+  subcategory: [without a subcategory, with no subcategory]
+  model: [with no model, without a product model]
+  sales_person: [with no sales person, without a sales rep]
+  scrap_reason: [with no scrap reason]
+
+# Name dimensions searched with "like": phrases with {v}, and generic words to search for.
+like:
+  product:
+    phrases: ['with {v} in the name', 'whose name contains {v}', 'named like {v}']
+    words: [Road, Mountain, Touring, Frame, Helmet, Jersey, Wheel, Pedal, Bike, Shorts, Gloves]
+  store:
+    phrases: ['with {v} in the name', 'whose name contains {v}']
+    words: [Bike, Cycle, Sports, Shop, Store, Supply, Outlet]
+  vendor:
+    phrases: ['with {v} in the name', 'whose name contains {v}']
+    words: [Bike, Cycle, Sport, Inc, Company]
+  model:
+    phrases: ['with {v} in the model name']
+    words: [Road, Mountain, Touring, Frame]
+
+# Thresholds for number filters; other number dimensions get their quartiles.
+numeric_ranges:
+  list_price: [50, 100, 500, 1000, 1500, 2000, 3000]
+  standard_cost: [10, 50, 100, 500, 1000]
+  weight: [100, 500, 1000]
+  days_to_manufacture: [1, 2, 3]
+  vacation_hours: [20, 40, 60, 80]
+
+# Dimensions never used in group_by.
+not_groupable: [product_number, territory_country]
+
+# Dimensions with so many values that a breakdown becomes a ranking (also any with > 30 values).
+many:
+- product
+- customer
+- store
+- vendor
+- sales_person
+- employee
+- ship_city
+- ship_state
+- model
+- job_title
+- special_offer
+- ship_country
+- subcategory
+
+# Of those, ones still asked for as a plain list ("list the subcategories").
+listable_many: [subcategory]
+
+# Dimensions people filter and group by most: weighted 3x.
+common_dims:
+- category
+- channel
+- color
+- customer
+- customer_type
+- days_to_manufacture
+- department
+- department_group
+- employee
+- gender
+- job_title
+- list_price
+- location
+- marital_status
+- model
+- offer_type
+- po_status
+- product
+- product_class
+- product_line
+- product_style
+- sales_person
+- scrap_reason
+- shift
+- ship_city
+- ship_country
+- ship_method
+- ship_state
+- special_offer
+- standard_cost
+- store
+- subcategory
+- territory
+- territory_country
+- territory_group
+- vacation_hours
+- vendor
+- vendor_rating
+- weight
+
+# Entity lists ("list products with their color"): the entity dimension and its attributes.
+# Facts with a `list:` entry in catalog.yaml are added after these.
+lists:
+  products:
+    entity: product
+    attrs:
+    - list_price
+    - color
+    - subcategory
+    - category
+    - model
+    - product_number
+    - standard_cost
+    - weight
+    - product_line
+    - days_to_manufacture
+    - size
+    - safety_stock
+    - reorder_point
+    - sell_start_date
+    - sell_end_date
+    - warranty
+    - product_description
+    - photo_file
+    - weight_unit
+  customers:
+    entity: customer
+    attrs:
+    - customer_type
+    - territory
+    - store
+    - customer_city
+    - customer_state
+    - customer_country
+    - customer_email
+    - customer_phone
+    - yearly_income
+    - occupation
+    - education
+    - customer_age
+    - cars_owned
+    - children
+    - customer_address
+    - commute_distance
+  employees:
+    entity: employee
+    attrs:
+    - job_title
+    - department
+    - hire_date
+    - gender
+    - vacation_hours
+    - shift
+    - marital_status
+    - manager
+    - pay_rate
+    - pay_frequency
+    - age
+    - birth_date
+    - sick_leave_hours
+    - employee_email
+    - employee_phone
+    - employee_city
+    - login
+    - org_level
+  vendors:
+    entity: vendor
+    attrs: [vendor_rating, vendor_city, vendor_state, vendor_country, vendor_account, vendor_website]
+
+# Relative weights of the lists (others 1), and of all lists against all measure facts.
+list_weights:
+  products: 3
+  customers: 2
+  employees: 3
+  vendors: 1.5
+lists_weight: 7
+
+# Relative weights of the facts for measure questions; facts not listed get new_fact_weight.
+fact_weights:
+  orders: 3
+  order_lines: 3
+  products: 1.5
+  customers: 1
+  employees: 1.5
+  purchases: 1
+  purchase_lines: 0.8
+  work_orders: 0.8
+  inventory: 0.6
+  vendors: 0.6
+new_fact_weight: 0.45
+
+# Facts with a date that questions do not put a time window on.
+no_time_facts: [employees]
+
+# Measures that count things although their name doesn't say so ("count" and "units" are recognized).
+count_measures: [headcount]
+
+# Words for the top or bottom of a list by an attribute ("the 3 most expensive products").
+list_superlatives:
+  list_price:
+    top: [most expensive, priciest]
+    bottom: [cheapest, least expensive]
+  weight:
+    top: [heaviest]
+  hire_date:
+    top: [most recently hired, newest]
+
+# Flags never combined in one question.
+opposite_flags:
+- [online, reseller]
+- [currently_sold, no_longer_sold]
+- [made_in_house, bought_in]
+- [store_customer, individual_customer]
+- [salaried, hourly]
+
+# "X vs Y" comparisons: the dimension's words to compare, or null for made-up values.
+versus:
+  channel: [online, reseller]
+  customer_type: [store, individual]
+  pay_type: [salaried, hourly]
+  territory_group: null
+  gender: [male, female]
+  marital_status: [married, single]
+  product_line: [Road, Mountain, Touring]
+  category: null
+  shift: [day, evening, night]
+
+# "How much did <customer> spend": facts it applies to, the dimensions picked from, the measure.
+spend:
+  facts: [orders, order_lines]
+  dims: [customer, customer, store]
+  measure: revenue
+  questions:
+  - how much did {v} spend with us {t}
+  - how much has {v} bought from us {t}
+  - what did {v} buy from us in total {t}
+  - total sales to {v} {t}
+  - how much revenue came from {v} {t}
+  - what is {v} worth to us {t}
+
+# Common ways to ask for a winner or a short ranking.
+superlatives:
+- measure: revenue
+  dim: sales_person
+  one:
+  - which sales rep sold the most {x}
+  - who sold the most {x}
+  - who was our best salesperson {x}
+  - top sales person {x}
+  many: ['who were our {n} best sales reps {x}', 'our top {n} sellers {x}']
+- measure: revenue
+  dim: territory
+  one:
+  - which territory brought in the most revenue {x}
+  - which region sold the most {x}
+  - our best territory {x}
+  - where did we sell the most {x}
+  many: ['our {n} best territories {x}']
+- measure: revenue
+  dim: customer
+  one: ['who is our biggest customer {x}', 'which customer spent the most {x}', 'who buys the most from us {x}']
+  many: ['who are our {n} biggest customers {x}', 'our top {n} customers {x}', '{n} largest customers {x}']
+- measure: purchase_spend
+  dim: vendor
+  one: ['who supplies us the most {x}', 'which vendor do we spend the most with {x}', 'our biggest supplier {x}']
+  many: ['our {n} biggest suppliers {x}', 'which {n} vendors do we spend the most with {x}']
+- measure: units_sold
+  dim: product
+  one:
+  - what did we sell the most of {x}
+  - which product sold the most {x}
+  - our best seller {x}
+  - most popular product {x}
+  many: ['our {n} best sellers {x}', '{n} most popular products {x}']
+- measure: revenue
+  dim: category
+  one: ['which category sells best {x}', 'our best selling category {x}']
+  many: []
+- measure: revenue
+  dim: subcategory
+  one: ['which subcategory sells best {x}', 'the best selling subcategory {x}']
+  many: []
+- measure: units_scrapped
+  dim: scrap_reason
+  one: ['what is the main reason for scrap {x}', 'the top scrap reason {x}']
+  many: ['the {n} main reasons for scrap {x}']
+- measure: order_count
+  dim: ship_method
+  one: ['which shipping method is used most {x}', 'most used carrier {x}']
+  many: []
+
+# A self-reference (employee -> manager), asked in both directions.
+hierarchy:
+  member: employee
+  parent: manager
+  down:
+  - who reports to {v}
+  - who works for {v}
+  - '{v}''s direct reports'
+  - who does {v} manage
+  - list {v}'s team
+  - employees reporting to {v}
+  - who is on {v}'s team
+  up:
+  - who is {v}'s manager
+  - who does {v} report to
+  - '{v}''s boss'
+  - who manages {v}
+  - who is the supervisor of {v}
+
+# Questions the database cannot answer, per not_tracked reason in catalog.yaml.
+not_tracked_questions:
+- reason: it records salaried or hourly pay, not full-time or part-time status
+  questions:
+  - how many full-time employees do we have
+  - list the part-time staff
+  - full time vs part time headcount
+  - which employees work part time
+  - number of full-time workers by department
+  - show me all fulltime staff
+- reason: it has no employee performance ratings
+  questions:
+  - which employees have the best performance rating
+  - average performance score by department
+  - list underperforming employees
+  - who got the highest appraisal score
+- reason: it has no product returns or refunds
+  questions:
+  - how many products were returned last year
+  - refund amount by category
+  - what is the return rate for bikes
+  - which customers returned the most items
+  - total refunds this year
+- reason: it has no customer satisfaction or complaint data
+  questions:
+  - customer satisfaction score by territory
+  - how many complaints did we get last month
+  - what is our NPS
+  - which products get the most complaints
+- reason: it has no website traffic data
+  questions:
+  - how many visitors did the website have last month
+  - web page views by month
+  - conversion rate of the online store
+  - how many people abandoned checkout on the website
+- reason: it has no marketing spend or budgets
+  questions:
+  - how much did we spend on advertising
+  - marketing budget by quarter
+  - ROI of the TV campaign
+  - cost per lead for our ads
+- reason: it records remaining sick leave and vacation hours, not absences or overtime
+  questions:
+  - how many overtime hours were worked last month
+  - who took the most sick days last year
+  - absences by department
+  - how many days was each employee absent
+- reason: it records ship dates, not delivery dates
+  questions:
+  - when was order 43659 delivered
+  - how many orders arrived late at the customer
+  - average delivery time to the customer's door
+  - orders delivered last week
+- reason: it has no competitor data
+  questions:
+  - how do our prices compare to competitors
+  - competitor bike prices
+  - what is our market share
+  - which competitor sells the cheapest helmets
+- reason: it has no weather data
+  questions: [what was the weather in Seattle last month, did rain affect sales in France, sales on sunny days]
+- reason: it has no share price or financial market data
+  questions: [what is our share price, market capitalization of AdventureWorks, stock price trend this year]
+- reason: it has no training or certification records
+  questions:
+  - which employees completed safety training
+  - certifications by department
+  - who is certified to run the paint line
+- reason: it has no forecasts or budgets
+  questions:
+  - sales forecast for next year
+  - budget vs actual by department
+  - expected revenue next quarter
+  - projected headcount for 2027
+- reason: it has no operating expenses such as rent or utilities
+  questions:
+  - what are our operating expenses
+  - office rent by month
+  - utility costs last year
+  - how much do we spend on electricity
+- reason: it has no customer churn or account closures
+  questions: [customer churn rate, which customers closed their accounts, how many customers did we lose last year]
+- reason: it has no store visitor counts
+  questions: [how many people visited our stores last month, store foot traffic by territory]
+- reason: it does not record where employees work from
+  questions: [who works from home, how many employees are remote, list hybrid workers]
+- reason: it has no social media data
+  questions: [how many Instagram followers do we have, social media mentions last month, most liked post this year]
+- reason: it has no support tickets
+  questions:
+  - how many support tickets were opened last month
+  - average ticket resolution time
+  - open help desk tickets by product
+- reason: it has no record of languages employees speak
+  questions: [which employees speak French, languages spoken by the sales team]
+- reason: national ID numbers are withheld for privacy
+  questions:
+  - what is {p}'s national ID number
+  - list employees with their social security numbers
+  - show national ID numbers
+- reason: card numbers are withheld for privacy
+  questions:
+  - show the credit card numbers of our customers
+  - what card number did order 43659 use
+  - list card numbers with expiry dates
+- reason: passwords are withheld for security
+  questions: ['what is the password for {p}', list password hashes, show user passwords]
+- reason: the question is not about the AdventureWorks data
+  questions:
+  - what is the capital of France
+  - write me a poem about bikes
+  - how do I bake bread
+  - who won the world cup
+  - what time is it in Tokyo
+  - tell me a joke
+
+# The made-up value used for {p} in those questions.
+person_dim: employee
+
+# Years that questions name (first, last). Default: the years of the facts' dates.
+years: [2011, 2026]
+
+# Made-up filter values. Each shape is a Python expression with the helpers word(n) (n made-up
+# syllables, capitalized), pick(list), randint(a, b), rand(), value(dim) and the lists under
+# names. A dimension's own shape wins over its group's; anything else gets a generic shape,
+# and columns of short codes (longest value <= 3 characters) get codes. siblings and levels
+# are dimensions whose real values look alike, so the hint lists one value under several of them.
+made_up_values:
+  syllables:
+  - zor
+  - van
+  - kel
+  - ith
+  - mar
+  - dra
+  - quin
+  - bel
+  - tor
+  - esh
+  - lun
+  - vex
+  - ora
+  - pim
+  - sal
+  - tek
+  - rho
+  - nai
+  - fen
+  - gul
+  - bra
+  - cor
+  - dax
+  - el
+  - fin
+  - gar
+  - hal
+  - iv
+  - jun
+  - kor
+  - lis
+  - mor
+  - nel
+  - osk
+  - pra
+  - ril
+  - sen
+  - tal
+  - ul
+  - ver
+  - wyn
+  - yar
+  - zel
+  - ab
+  - cy
+  - do
+  - ka
+  - mi
+  names:
+    colors:
+    - Teal
+    - Copper
+    - Orange
+    - Purple
+    - Green
+    - Gold
+    - Navy
+    - Bronze
+    - Maroon
+    - Olive
+    - Coral
+    - Indigo
+  groups:
+    people:
+    - customer
+    - employee
+    - sales_person
+    - manager
+    - contact
+    - person
+    - buyer
+    - candidate
+    - reviewer
+    - address_owner
+    companies: [store, vendor, store_bank, candidate_last_employer]
+    places:
+    - territory
+    - territory_group
+    - ship_country
+    - ship_state
+    - ship_city
+    - billing_city
+    - billing_state
+    - billing_country
+    - customer_city
+    - customer_state
+    - customer_country
+    - vendor_city
+    - vendor_state
+    - vendor_country
+    - employee_city
+    - employee_state
+    - employee_country
+    - candidate_city
+    products: [product, assembly]
+    categories: [category, subcategory]
+    named_things: [department, scrap_reason, location, document, document_folder, sales_reason]
+  shapes:
+    customer: f'{word(pick([1, 2]))} {word(pick([2, 3]))}' if rand() < 0.6 else value('store')
+    territory_group: pick(['North', 'South', 'East', 'West', 'Central']) + ' ' + word()
+    model: pick([f'{word()}-{randint(1, 9)}00', f"{word()} {pick(['Frame', 'Helmet', 'Jersey', 'Tire Tube'])}"])
+    color: pick(colors)
+    yearly_income: f'{(a := pick([10, 20, 40, 60, 80, 120]) * 1000) + 1}-{a + 20000}'
+    commute_distance: f'{(a := pick([1, 3, 7, 15]))}-{a * 2} Miles'
+    postal_code: f'{randint(10000, 99999)}'
+    special_offer: f"{word()} {pick(['Discount', 'Sale', 'Promotion'])} {randint(2, 40)}%"
+    job_title: f'{word()} ' + pick(['Specialist', 'Technician', 'Planner', 'Coordinator', 'Supervisor', 'Manager'])
+    people: f'{word(pick([1, 2]))} {word(pick([2, 3]))}'
+    companies: f'{word()} ' + pick(['Cycles', 'Bike Shop', 'Supply', 'Sports', 'Outfitters', 'Company', 'Inc.', 'Wheelworks', 'Trading', 'Bank', 'Bikes', 'Cycle Store'])
+    places: word(pick([2, 3])) + pick(['', '', 'ia', ' Falls', ' Coast', 'land', ' Bay', ' Province'])
+    products: pick([f'{word()}-{randint(1, 9)}00 {pick(colors)}, {pick([40, 44, 48, 52, 56, 60])}', f"{word()} {pick(['Crank Arm', 'Hub', 'Saddle', 'Fork', 'Chain Ring', 'Bottle', 'Jacket', 'Tire'])}", f"{pick(['LL', 'ML', 'HL'])} {word()} {pick(['Frame', 'Wheel', 'Pedal', 'Seat'])}"])
+    categories: pick([word() + 's', f'{word()} Gear', f'{word()} Parts'])
+    named_things: f'{word()} ' + pick(['Operations', 'Assembly', 'Control', 'Support', 'Review', 'Check', 'Guide', 'Bay'])
+  siblings:
+  - [people]
+  - [places]
+  - [products]
+  - [store, customer, address_owner]
+  - [vendor, address_owner]
+  levels:
+  - [ship_city, billing_city, customer_city, vendor_city, employee_city, candidate_city]
+  - [ship_state, billing_state, customer_state, vendor_state, employee_state]
+  - [ship_country, billing_country, customer_country, vendor_country, employee_country]
+  - [territory, ship_country, customer_country, billing_country]

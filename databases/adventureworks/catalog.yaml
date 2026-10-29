@@ -1,0 +1,1065 @@
+# AdventureWorks semantic catalog: every table, structure only (no data values).
+#
+# This is the meaning layer between questions and SQL. A question becomes a small
+# plan (measures, group_by, filters, time, order_by, limit) over the names below, and
+# compile.py turns the plan into one SELECT. Joins only ever run from the fact's
+# base table towards "one" sides (many-to-one), so totals never double count.
+#
+# Built from the database's foreign keys and column comments, then edited by hand.
+# Things marked REVIEW are judgement calls to check.
+
+project:
+  name: AdventureWorks             # in the system prompt ("questions about the AdventureWorks database")
+  conninfo: dbname=Adventureworks  # aq's default --db; value lookups and the test set
+  train_db: adventureworks_shifted # where gen_plans runs its plans (dates moved up to today)
+  test_db: adventureworks_shifted  # where scores are computed (relative dates need recent data)
+  model_file: advworx-plans.gguf   # the model aq loads from its data dir
+  schemas: [sales, person, production, purchasing, humanresources]   # what coverage.py checks
+
+# Facts that are lists of things rather than events: preferred for plans with no measures
+# (facts with a `list:` key are added after these).
+entity_facts: [products, customers, employees, vendors]
+
+# How aq's live lookup finds names in a question (values.py).
+lookup:
+  # Never looked up: the values are the catalog's own words, learned from the wording itself.
+  skip: [
+    channel, customer_gender, customer_marital_status, customer_type, document_status,
+    email_promotion, gender, marital_status, order_status, pay_frequency, person_type, po_status,
+    product_class, product_style, store_business_type, tax_type, transaction_type, vendor_rating]
+  # Looked up only when the question also names the dimension ("day shift", "home address").
+  context: [
+    address_type, billing_city, billing_country, billing_state, bom_unit, candidate_city,
+    candidate_education, candidate_last_job, candidate_major, commute_distance, contact_type,
+    country_code, currency_code, customer_city, customer_country, customer_state, department_group,
+    document_folder, document_revision, education, employee_city, employee_country, employee_state,
+    file_extension, from_currency, job_title, language, maintenance_years, occupation,
+    offer_category, phone_type, postal_code, product_number, reason_type, shelf, shift, size,
+    size_unit, state_code, store_bank, store_brands, store_internet, store_specialty,
+    tax_rate_name, territory_country, title, vendor_city, vendor_country, vendor_state,
+    vendor_unit, warranty, weight_unit, yearly_income]
+  # Names that are also everyday words in questions ("sales by territory"): never a hint.
+  common_words: [
+    billing, black, document, each, engineering, executive, finance, maintenance, marketing, other,
+    paint, price, production, purchasing, quality, review, sales, shipping, white]
+
+nodes:            # alias -> table. One alias per role (a person can be a customer or a sales person).
+  soh:          Sales.SalesOrderHeader
+  sod:          Sales.SalesOrderDetail
+  cust:         Sales.Customer
+  cust_person:  Person.Person
+  store:        Sales.Store
+  terr:         Sales.SalesTerritory
+  sp:           Sales.SalesPerson
+  sp_person:    Person.Person
+  ship_addr:    Person.Address
+  ship_state:   Person.StateProvince
+  ship_country: Person.CountryRegion
+  shipm:        Purchasing.ShipMethod
+  offer:        Sales.SpecialOffer
+  prod:         Production.Product
+  psub:         Production.ProductSubcategory
+  pcat:         Production.ProductCategory
+  pmodel:       Production.ProductModel
+  poh:          Purchasing.PurchaseOrderHeader
+  pod:          Purchasing.PurchaseOrderDetail
+  vendor:       Purchasing.Vendor
+  emp:          HumanResources.Employee
+  emp_person:   Person.Person
+  edh:          HumanResources.EmployeeDepartmentHistory
+  dept:         HumanResources.Department
+  shift:        HumanResources.Shift
+  wo:           Production.WorkOrder
+  scrap:        Production.ScrapReason
+  inv:          Production.ProductInventory
+  loc:          Production.Location
+  # ---- added for full coverage (round 3) ----
+  # Subquery nodes: one row per key, so joins to them stay many-to-one.
+  bill_addr:    Person.Address
+  bill_state:   Person.StateProvince
+  bill_country: Person.CountryRegion
+  card:         Sales.CreditCard
+  fxrate:       Sales.CurrencyRate
+  currency:     Sales.Currency
+  ccur:         Sales.CountryRegionCurrency
+  sohr:         Sales.SalesOrderHeaderSalesReason
+  sreason:      Sales.SalesReason
+  taxr:         Sales.SalesTaxRate
+  cart:         Sales.ShoppingCartItem
+  sop:          Sales.SpecialOfferProduct
+  quota:        Sales.SalesPersonQuotaHistory
+  sth:          Sales.SalesTerritoryHistory
+  pcc:          Sales.PersonCreditCard
+  per:          Person.Person
+  per_email:    Person.EmailAddress
+  per_phone:    Person.PersonPhone
+  phone_type:   Person.PhoneNumberType
+  cust_email:   Person.EmailAddress
+  cust_phone:   Person.PersonPhone
+  emp_email:    Person.EmailAddress
+  emp_phone:    Person.PersonPhone
+  bea:          Person.BusinessEntityAddress
+  addrtype:     Person.AddressType
+  addr_person:  Person.Person
+  bec:          Person.BusinessEntityContact
+  contact:      Person.Person
+  ctype:        Person.ContactType
+  cust_demo: >-
+    (SELECT d.BusinessEntityID,
+    (xpath('/s:IndividualSurvey/s:TotalPurchaseYTD/text()', d.Demographics, n.ns))[1]::text::numeric AS TotalPurchaseYTD,
+    (xpath('/s:IndividualSurvey/s:DateFirstPurchase/text()', d.Demographics, n.ns))[1]::text::date AS DateFirstPurchase,
+    (xpath('/s:IndividualSurvey/s:BirthDate/text()', d.Demographics, n.ns))[1]::text::date AS BirthDate,
+    (xpath('/s:IndividualSurvey/s:MaritalStatus/text()', d.Demographics, n.ns))[1]::text AS MaritalStatus,
+    (xpath('/s:IndividualSurvey/s:YearlyIncome/text()', d.Demographics, n.ns))[1]::text AS YearlyIncome,
+    (xpath('/s:IndividualSurvey/s:Gender/text()', d.Demographics, n.ns))[1]::text AS Gender,
+    (xpath('/s:IndividualSurvey/s:TotalChildren/text()', d.Demographics, n.ns))[1]::text::int AS TotalChildren,
+    (xpath('/s:IndividualSurvey/s:NumberChildrenAtHome/text()', d.Demographics, n.ns))[1]::text::int AS NumberChildrenAtHome,
+    (xpath('/s:IndividualSurvey/s:Education/text()', d.Demographics, n.ns))[1]::text AS Education,
+    (xpath('/s:IndividualSurvey/s:Occupation/text()', d.Demographics, n.ns))[1]::text AS Occupation,
+    (xpath('/s:IndividualSurvey/s:HomeOwnerFlag/text()', d.Demographics, n.ns))[1]::text AS HomeOwnerFlag,
+    (xpath('/s:IndividualSurvey/s:NumberCarsOwned/text()', d.Demographics, n.ns))[1]::text::int AS NumberCarsOwned,
+    (xpath('/s:IndividualSurvey/s:CommuteDistance/text()', d.Demographics, n.ns))[1]::text AS CommuteDistance
+    FROM Person.Person d,
+    (SELECT ARRAY[ARRAY['s', 'http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/IndividualSurvey']] AS ns) n
+    WHERE d.Demographics IS NOT NULL)
+  store_demo: >-
+    (SELECT d.BusinessEntityID,
+    (xpath('/s:StoreSurvey/s:AnnualSales/text()', d.Demographics, n.ns))[1]::text::numeric AS AnnualSales,
+    (xpath('/s:StoreSurvey/s:AnnualRevenue/text()', d.Demographics, n.ns))[1]::text::numeric AS AnnualRevenue,
+    (xpath('/s:StoreSurvey/s:BankName/text()', d.Demographics, n.ns))[1]::text AS BankName,
+    (xpath('/s:StoreSurvey/s:BusinessType/text()', d.Demographics, n.ns))[1]::text AS BusinessType,
+    (xpath('/s:StoreSurvey/s:YearOpened/text()', d.Demographics, n.ns))[1]::text::int AS YearOpened,
+    (xpath('/s:StoreSurvey/s:Specialty/text()', d.Demographics, n.ns))[1]::text AS Specialty,
+    (xpath('/s:StoreSurvey/s:SquareFeet/text()', d.Demographics, n.ns))[1]::text::int AS SquareFeet,
+    (xpath('/s:StoreSurvey/s:Brands/text()', d.Demographics, n.ns))[1]::text AS Brands,
+    (xpath('/s:StoreSurvey/s:Internet/text()', d.Demographics, n.ns))[1]::text AS Internet,
+    (xpath('/s:StoreSurvey/s:NumberEmployees/text()', d.Demographics, n.ns))[1]::text::int AS NumberEmployees
+    FROM Sales.Store d,
+    (SELECT ARRAY[ARRAY['s', 'http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/StoreSurvey']] AS ns) n
+    WHERE d.Demographics IS NOT NULL)
+  # Where a customer is: the store's address for store customers, the person's home otherwise.
+  cust_loc: >-
+    (SELECT DISTINCT ON (c.CustomerID) c.CustomerID, a.AddressLine1, a.AddressLine2, a.City, a.PostalCode,
+    s.Name AS State, r.Name AS Country
+    FROM Sales.Customer c
+    JOIN Person.BusinessEntityAddress b ON b.BusinessEntityID = COALESCE(c.StoreID, c.PersonID)
+    JOIN Person.Address a ON a.AddressID = b.AddressID
+    JOIN Person.StateProvince s ON s.StateProvinceID = a.StateProvinceID
+    JOIN Person.CountryRegion r ON r.CountryRegionCode = s.CountryRegionCode
+    ORDER BY c.CustomerID, b.AddressTypeID)
+  vendor_loc: >-
+    (SELECT DISTINCT ON (b.BusinessEntityID) b.BusinessEntityID, a.City, a.PostalCode, s.Name AS State, r.Name AS Country
+    FROM Person.BusinessEntityAddress b
+    JOIN Person.Address a ON a.AddressID = b.AddressID
+    JOIN Person.StateProvince s ON s.StateProvinceID = a.StateProvinceID
+    JOIN Person.CountryRegion r ON r.CountryRegionCode = s.CountryRegionCode
+    ORDER BY b.BusinessEntityID, b.AddressTypeID)
+  emp_loc: >-
+    (SELECT DISTINCT ON (b.BusinessEntityID) b.BusinessEntityID, a.City, a.PostalCode, s.Name AS State, r.Name AS Country
+    FROM Person.BusinessEntityAddress b
+    JOIN Person.Address a ON a.AddressID = b.AddressID
+    JOIN Person.StateProvince s ON s.StateProvinceID = a.StateProvinceID
+    JOIN Person.CountryRegion r ON r.CountryRegionCode = s.CountryRegionCode
+    ORDER BY b.BusinessEntityID, b.AddressTypeID)
+  # HR
+  cur_pay: >-
+    (SELECT DISTINCT ON (BusinessEntityID) BusinessEntityID, Rate, PayFrequency
+    FROM HumanResources.EmployeePayHistory ORDER BY BusinessEntityID, RateChangeDate DESC)
+  # The manager is the employee one level up the organization tree (/1/2/ reports to /1/).
+  emp_mgr: >-
+    (SELECT e.BusinessEntityID, p.FirstName || ' ' || p.LastName AS ManagerName
+    FROM HumanResources.Employee e
+    JOIN HumanResources.Employee m ON m.OrganizationNode = regexp_replace(e.OrganizationNode, '[0-9]+/$', '')
+    AND e.OrganizationNode <> '/'
+    JOIN Person.Person p ON p.BusinessEntityID = m.BusinessEntityID)
+  eph:          HumanResources.EmployeePayHistory
+  edh_all:      HumanResources.EmployeeDepartmentHistory
+  jc: >-
+    (SELECT j.JobCandidateID, j.BusinessEntityID,
+    (xpath('/r:Resume/r:Name/r:Name.First/text()', j.Resume, n.ns))[1]::text || ' ' ||
+    (xpath('/r:Resume/r:Name/r:Name.Last/text()', j.Resume, n.ns))[1]::text AS Name,
+    (xpath('/r:Resume/r:EMail/text()', j.Resume, n.ns))[1]::text AS EMail,
+    trim((xpath('/r:Resume/r:Skills/text()', j.Resume, n.ns))[1]::text) AS Skills,
+    (xpath('/r:Resume/r:Education/r:Edu.Level/text()', j.Resume, n.ns))[1]::text AS EducationLevel,
+    (xpath('/r:Resume/r:Education/r:Edu.Major/text()', j.Resume, n.ns))[1]::text AS Major,
+    (xpath('/r:Resume/r:Employment/r:Emp.JobTitle/text()', j.Resume, n.ns))[1]::text AS LastJobTitle,
+    (xpath('/r:Resume/r:Employment/r:Emp.OrgName/text()', j.Resume, n.ns))[1]::text AS LastEmployer,
+    (xpath('/r:Resume/r:Address/r:Addr.Location/r:Location/r:Loc.City/text()', j.Resume, n.ns))[1]::text AS City
+    FROM HumanResources.JobCandidate j,
+    (SELECT ARRAY[ARRAY['r', 'http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/Resume']] AS ns) n)
+  buyer:        HumanResources.Employee
+  buyer_person: Person.Person
+  # Production
+  um_size:      Production.UnitMeasure
+  um_weight:    Production.UnitMeasure
+  um_bom:       Production.UnitMeasure
+  um_vendor:    Production.UnitMeasure
+  model_info: >-
+    (SELECT m.ProductModelID,
+    trim((xpath('/p1:ProductDescription/p1:Summary/html:p/text()', m.CatalogDescription, n.ns))[1]::text) AS Summary,
+    (xpath('/p1:ProductDescription/p1:Features/wm:Warranty/wm:WarrantyPeriod/text()', m.CatalogDescription, n.ns))[1]::text AS WarrantyPeriod,
+    (xpath('/p1:ProductDescription/p1:Features/wm:Maintenance/wm:NoOfYears/text()', m.CatalogDescription, n.ns))[1]::text AS MaintenanceYears
+    FROM Production.ProductModel m,
+    (SELECT ARRAY[ARRAY['p1', 'http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelDescription'],
+    ARRAY['wm', 'http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelWarrAndMain'],
+    ARRAY['html', 'http://www.w3.org/1999/xhtml']] AS ns) n
+    WHERE m.CatalogDescription IS NOT NULL)
+  model_desc_en: >-
+    (SELECT x.ProductModelID, d.Description FROM Production.ProductModelProductDescriptionCulture x
+    JOIN Production.ProductDescription d ON d.ProductDescriptionID = x.ProductDescriptionID
+    WHERE trim(x.CultureID) = 'en')
+  prod_photo: >-
+    (SELECT pp.ProductID, ph.LargePhotoFileName, ph.ThumbnailPhotoFileName
+    FROM Production.ProductProductPhoto pp JOIN Production.ProductPhoto ph ON ph.ProductPhotoID = pp.ProductPhotoID
+    WHERE pp."primary")
+  pmpdc:        Production.ProductModelProductDescriptionCulture
+  pdesc:        Production.ProductDescription
+  culture:      Production.Culture
+  doc:          Production.Document
+  doc_folder:   Production.Document
+  pdoc:         Production.ProductDocument
+  pmi:          Production.ProductModelIllustration
+  illus:        Production.Illustration
+  pch:          Production.ProductCostHistory
+  plph:         Production.ProductListPriceHistory
+  rev:          Production.ProductReview
+  th: >-
+    (SELECT TransactionID, ProductID, ReferenceOrderID, ReferenceOrderLineID, TransactionDate, TransactionType,
+    Quantity, ActualCost, FALSE AS Archived FROM Production.TransactionHistory
+    UNION ALL
+    SELECT TransactionID, ProductID, ReferenceOrderID, ReferenceOrderLineID, TransactionDate, TransactionType,
+    Quantity, ActualCost, TRUE AS Archived FROM Production.TransactionHistoryArchive)
+  bom:          Production.BillOfMaterials
+  asm:          Production.Product
+  wor:          Production.WorkOrderRouting
+  # Purchasing
+  pv:           Purchasing.ProductVendor
+
+# Nodes that are one role of a shared table (a buyer is a person, an assembly is a product).
+# A plain list never starts from them: "list the buyers" means people who placed purchase
+# orders, so it starts from purchases, not from every person in Person.Person.
+role_nodes: [cust_person, sp_person, emp_person, bill_addr, bill_state, bill_country, buyer, buyer_person, asm,
+             um_size, um_weight, um_bom, um_vendor, addr_person, contact, cust_email, cust_phone, emp_email,
+             emp_phone, per_email, per_phone, cust_loc, vendor_loc, emp_loc, cust_demo, doc_folder, cur_pay, emp_mgr]
+
+# Many-to-one edges: [from, to, ON condition, optional]. optional = the foreign key can be
+# NULL, so the compiler uses LEFT JOIN when the node is only displayed or grouped.
+joins:
+  - [sod,  soh,          "sod.SalesOrderID = soh.SalesOrderID"]
+  - [sod,  prod,         "sod.ProductID = prod.ProductID"]
+  - [sod,  offer,        "sod.SpecialOfferID = offer.SpecialOfferID"]
+  - [soh,  cust,         "soh.CustomerID = cust.CustomerID"]
+  - [soh,  terr,         "soh.TerritoryID = terr.TerritoryID"]
+  - [soh,  sp,           "soh.SalesPersonID = sp.BusinessEntityID", optional]
+  - [soh,  ship_addr,    "soh.ShipToAddressID = ship_addr.AddressID"]
+  - [soh,  shipm,        "soh.ShipMethodID = shipm.ShipMethodID"]
+  - [ship_addr, ship_state, "ship_addr.StateProvinceID = ship_state.StateProvinceID"]
+  - [ship_state, ship_country, "ship_state.CountryRegionCode = ship_country.CountryRegionCode"]
+  - [cust, cust_person,  "cust.PersonID = cust_person.BusinessEntityID", optional]
+  - [cust, store,        "cust.StoreID = store.BusinessEntityID", optional]
+  - [cust, terr,         "cust.TerritoryID = terr.TerritoryID", optional]
+  - [sp,   sp_person,    "sp.BusinessEntityID = sp_person.BusinessEntityID"]
+  - [sp,   terr,         "sp.TerritoryID = terr.TerritoryID", optional]
+  - [prod, psub,         "prod.ProductSubcategoryID = psub.ProductSubcategoryID", optional]
+  - [psub, pcat,         "psub.ProductCategoryID = pcat.ProductCategoryID"]
+  - [prod, pmodel,       "prod.ProductModelID = pmodel.ProductModelID", optional]
+  - [pod,  poh,          "pod.PurchaseOrderID = poh.PurchaseOrderID"]
+  - [pod,  prod,         "pod.ProductID = prod.ProductID"]
+  - [poh,  vendor,       "poh.VendorID = vendor.BusinessEntityID"]
+  - [poh,  shipm,        "poh.ShipMethodID = shipm.ShipMethodID"]
+  - [emp,  emp_person,   "emp.BusinessEntityID = emp_person.BusinessEntityID"]
+  # Current department only (EndDate IS NULL): exactly one row per employee.
+  - [emp,  edh,          "emp.BusinessEntityID = edh.BusinessEntityID AND edh.EndDate IS NULL"]
+  - [edh,  dept,         "edh.DepartmentID = dept.DepartmentID"]
+  - [edh,  shift,        "edh.ShiftID = shift.ShiftID"]
+  - [wo,   prod,         "wo.ProductID = prod.ProductID"]
+  - [wo,   scrap,        "wo.ScrapReasonID = scrap.ScrapReasonID", optional]
+  - [inv,  prod,         "inv.ProductID = prod.ProductID"]
+  - [inv,  loc,          "inv.LocationID = loc.LocationID"]
+  # ---- added for full coverage (round 3) ----
+  # sales orders
+  - [soh,  bill_addr,    "soh.BillToAddressID = bill_addr.AddressID"]
+  - [bill_addr, bill_state, "bill_addr.StateProvinceID = bill_state.StateProvinceID"]
+  - [bill_state, bill_country, "bill_state.CountryRegionCode = bill_country.CountryRegionCode"]
+  - [soh,  card,         "soh.CreditCardID = card.CreditCardID", optional]
+  - [soh,  fxrate,       "soh.CurrencyRateID = fxrate.CurrencyRateID", optional]
+  - [fxrate, currency,   "fxrate.ToCurrencyCode = currency.CurrencyCode"]
+  - [sohr, soh,          "sohr.SalesOrderID = soh.SalesOrderID"]
+  - [sohr, sreason,      "sohr.SalesReasonID = sreason.SalesReasonID"]
+  - [ccur, ship_country, "ccur.CountryRegionCode = ship_country.CountryRegionCode"]
+  - [ccur, currency,     "ccur.CurrencyCode = currency.CurrencyCode"]
+  - [taxr, ship_state,   "taxr.StateProvinceID = ship_state.StateProvinceID"]
+  - [cart, prod,         "cart.ProductID = prod.ProductID"]
+  - [sop,  offer,        "sop.SpecialOfferID = offer.SpecialOfferID"]
+  - [sop,  prod,         "sop.ProductID = prod.ProductID"]
+  - [store, sp,          "store.SalesPersonID = sp.BusinessEntityID", optional]
+  - [store, store_demo,  "store.BusinessEntityID = store_demo.BusinessEntityID", optional]
+  - [cust, cust_loc,     "cust.CustomerID = cust_loc.CustomerID", optional]
+  - [quota, sp,          "quota.BusinessEntityID = sp.BusinessEntityID"]
+  - [sth,  sp,           "sth.BusinessEntityID = sp.BusinessEntityID"]
+  - [sth,  terr,         "sth.TerritoryID = terr.TerritoryID"]
+  - [pcc,  per,          "pcc.BusinessEntityID = per.BusinessEntityID"]
+  - [pcc,  card,         "pcc.CreditCardID = card.CreditCardID"]
+  # people, contacts and addresses
+  - [per,  per_email,    "per.BusinessEntityID = per_email.BusinessEntityID", optional]
+  - [per,  per_phone,    "per.BusinessEntityID = per_phone.BusinessEntityID", optional]
+  - [per_phone, phone_type, "per_phone.PhoneNumberTypeID = phone_type.PhoneNumberTypeID"]
+  - [per,  cust_demo,    "per.BusinessEntityID = cust_demo.BusinessEntityID", optional]
+  - [cust_person, cust_demo,  "cust_person.BusinessEntityID = cust_demo.BusinessEntityID", optional]
+  - [cust_person, cust_email, "cust_person.BusinessEntityID = cust_email.BusinessEntityID", optional]
+  - [cust_person, cust_phone, "cust_person.BusinessEntityID = cust_phone.BusinessEntityID", optional]
+  - [emp_person, emp_email,   "emp_person.BusinessEntityID = emp_email.BusinessEntityID", optional]
+  - [emp_person, emp_phone,   "emp_person.BusinessEntityID = emp_phone.BusinessEntityID", optional]
+  - [bea,  ship_addr,    "bea.AddressID = ship_addr.AddressID"]
+  - [bea,  addrtype,     "bea.AddressTypeID = addrtype.AddressTypeID"]
+  - [bea,  addr_person,  "bea.BusinessEntityID = addr_person.BusinessEntityID", optional]
+  - [bea,  store,        "bea.BusinessEntityID = store.BusinessEntityID", optional]
+  - [bea,  vendor,       "bea.BusinessEntityID = vendor.BusinessEntityID", optional]
+  - [bec,  contact,      "bec.PersonID = contact.BusinessEntityID"]
+  - [bec,  ctype,        "bec.ContactTypeID = ctype.ContactTypeID"]
+  - [bec,  store,        "bec.BusinessEntityID = store.BusinessEntityID", optional]
+  - [bec,  vendor,       "bec.BusinessEntityID = vendor.BusinessEntityID", optional]
+  - [vendor, vendor_loc, "vendor.BusinessEntityID = vendor_loc.BusinessEntityID", optional]
+  # HR
+  - [emp,  emp_loc,      "emp.BusinessEntityID = emp_loc.BusinessEntityID", optional]
+  - [emp,  cur_pay,      "emp.BusinessEntityID = cur_pay.BusinessEntityID", optional]
+  - [emp,  emp_mgr,      "emp.BusinessEntityID = emp_mgr.BusinessEntityID", optional]
+  - [eph,  emp,          "eph.BusinessEntityID = emp.BusinessEntityID"]
+  - [edh_all, emp,       "edh_all.BusinessEntityID = emp.BusinessEntityID"]
+  - [edh_all, dept,      "edh_all.DepartmentID = dept.DepartmentID"]
+  - [edh_all, shift,     "edh_all.ShiftID = shift.ShiftID"]
+  - [jc,   emp,          "jc.BusinessEntityID = emp.BusinessEntityID", optional]
+  # production
+  - [prod, um_size,      "prod.SizeUnitMeasureCode = um_size.UnitMeasureCode", optional]
+  - [prod, um_weight,    "prod.WeightUnitMeasureCode = um_weight.UnitMeasureCode", optional]
+  - [prod, prod_photo,   "prod.ProductID = prod_photo.ProductID", optional]
+  - [pmodel, model_info, "pmodel.ProductModelID = model_info.ProductModelID", optional]
+  - [pmodel, model_desc_en, "pmodel.ProductModelID = model_desc_en.ProductModelID", optional]
+  - [pmpdc, pmodel,      "pmpdc.ProductModelID = pmodel.ProductModelID"]
+  - [pmpdc, pdesc,       "pmpdc.ProductDescriptionID = pdesc.ProductDescriptionID"]
+  - [pmpdc, culture,     "pmpdc.CultureID = culture.CultureID"]
+  - [doc,  emp,          "doc.Owner = emp.BusinessEntityID"]
+  - [doc,  doc_folder,   "doc_folder.DocumentNode = regexp_replace(doc.DocumentNode, '[0-9]+/$', '') AND doc.DocumentNode <> '/'", optional]
+  - [pdoc, prod,         "pdoc.ProductID = prod.ProductID"]
+  - [pdoc, doc,          "pdoc.DocumentNode = doc.DocumentNode"]
+  - [pmi,  pmodel,       "pmi.ProductModelID = pmodel.ProductModelID"]
+  - [pmi,  illus,        "pmi.IllustrationID = illus.IllustrationID"]
+  - [pch,  prod,         "pch.ProductID = prod.ProductID"]
+  - [plph, prod,         "plph.ProductID = prod.ProductID"]
+  - [rev,  prod,         "rev.ProductID = prod.ProductID"]
+  - [th,   prod,         "th.ProductID = prod.ProductID"]
+  - [bom,  prod,         "bom.ComponentID = prod.ProductID"]
+  - [bom,  asm,          "bom.ProductAssemblyID = asm.ProductID", optional]
+  - [bom,  um_bom,       "bom.UnitMeasureCode = um_bom.UnitMeasureCode"]
+  - [wor,  wo,           "wor.WorkOrderID = wo.WorkOrderID"]
+  - [wor,  prod,         "wor.ProductID = prod.ProductID"]
+  - [wor,  loc,          "wor.LocationID = loc.LocationID"]
+  # purchasing
+  - [poh,  buyer,        "poh.EmployeeID = buyer.BusinessEntityID"]
+  - [buyer, buyer_person, "buyer.BusinessEntityID = buyer_person.BusinessEntityID"]
+  - [pv,   prod,         "pv.ProductID = prod.ProductID"]
+  - [pv,   vendor,       "pv.BusinessEntityID = vendor.BusinessEntityID"]
+  - [pv,   um_vendor,    "pv.UnitMeasureCode = um_vendor.UnitMeasureCode"]
+
+# Facts: what you can count or add up. Listed in order of preference: when two facts
+# both answer a plan, the first one wins (orders before order_lines, so a plain
+# "revenue by territory" sums order headers, and "revenue by category" falls through
+# to order lines because only they reach products).
+facts:
+  orders:
+    base: soh
+    date: soh.OrderDate
+    describe: one row per sales order
+    measures:
+      order_count:     {sql: "COUNT(*)", say: [number of orders, how many orders, order count]}
+      revenue:         {sql: "SUM(soh.SubTotal)", say: [sales, revenue, sales amount, turnover, how much we sold]}
+      total_due:       {sql: "SUM(soh.TotalDue)", say: [total due, amount billed, sales including tax and freight]}
+      avg_order_value: {sql: "AVG(soh.SubTotal)", say: [average order value, average order size, average sale]}
+      freight:         {sql: "SUM(soh.Freight)", say: [freight, shipping cost]}
+      tax:             {sql: "SUM(soh.TaxAmt)", say: [tax, tax collected]}
+      customer_count:  {sql: "COUNT(DISTINCT soh.CustomerID)", say: [number of customers who ordered, buying customers]}
+      avg_days_to_ship: {sql: "AVG(soh.ShipDate::date - soh.OrderDate::date)", say: [average days to ship, days from order to shipment, shipping time]}
+      late_orders:     {sql: "COUNT(*) FILTER (WHERE soh.ShipDate > soh.DueDate)", say: [late orders, orders shipped late, overdue orders]}
+  order_lines:
+    base: sod
+    date: soh.OrderDate
+    describe: one row per product on a sales order
+    measures:
+      revenue:         {sql: "SUM(sod.OrderQty * sod.UnitPrice * (1 - sod.UnitPriceDiscount))", say: [sales, revenue]}
+      units_sold:      {sql: "SUM(sod.OrderQty)", say: [units sold, quantity sold, how many sold]}
+      order_count:     {sql: "COUNT(DISTINCT sod.SalesOrderID)", say: [number of orders]}
+      avg_unit_price:  {sql: "AVG(sod.UnitPrice)", say: [average selling price, average unit price]}
+      discount_amount: {sql: "SUM(sod.OrderQty * sod.UnitPrice * sod.UnitPriceDiscount)", say: [discounts given, discount amount]}
+      customer_count:  {sql: "COUNT(DISTINCT soh.CustomerID)", say: [number of customers who bought]}
+      line_count:      {sql: "COUNT(*)", say: [number of order lines, order line count, line items]}
+      cost_of_sales:   {sql: "SUM(sod.OrderQty * prod.StandardCost)", say: [cost of goods sold, cost of sales, COGS]}
+      gross_profit:    {sql: "SUM(sod.OrderQty * (sod.UnitPrice * (1 - sod.UnitPriceDiscount) - prod.StandardCost))", say: [gross profit, profit]}
+      gross_margin_pct: {sql: "ROUND(100 * SUM(sod.OrderQty * (sod.UnitPrice * (1 - sod.UnitPriceDiscount) - prod.StandardCost)) / NULLIF(SUM(sod.OrderQty * sod.UnitPrice * (1 - sod.UnitPriceDiscount)), 0), 2)", say: [gross margin percent, margin percentage, profit margin]}
+  purchases:
+    base: poh
+    date: poh.OrderDate
+    describe: one row per purchase order to a vendor
+    measures:
+      po_count:        {sql: "COUNT(*)", say: [number of purchase orders]}
+      purchase_spend:  {sql: "SUM(poh.SubTotal)", say: [purchase spend, amount spent with vendors, purchasing cost]}
+      po_freight:      {sql: "SUM(poh.Freight)", say: [purchase freight]}
+      po_tax:          {sql: "SUM(poh.TaxAmt)", say: [purchase tax, tax paid to vendors]}
+      po_total:        {sql: "SUM(poh.SubTotal + poh.TaxAmt + poh.Freight)", say: [purchase total including tax and freight, total purchase cost]}
+  purchase_lines:
+    base: pod
+    date: poh.OrderDate
+    describe: one row per product on a purchase order
+    measures:
+      purchase_spend:  {sql: "SUM(pod.OrderQty * pod.UnitPrice)", say: [purchase spend]}
+      units_purchased: {sql: "SUM(pod.OrderQty)", say: [units purchased, quantity ordered from vendors]}
+      units_received:  {sql: "SUM(pod.ReceivedQty)", say: [units received]}
+      units_rejected:  {sql: "SUM(pod.RejectedQty)", say: [units rejected, rejected quantity]}
+      avg_purchase_price: {sql: "AVG(pod.UnitPrice)", say: [average purchase price, average price paid]}
+  work_orders:
+    base: wo
+    date: wo.StartDate
+    describe: one row per manufacturing work order
+    measures:
+      work_order_count: {sql: "COUNT(*)", say: [number of work orders]}
+      units_built:      {sql: "SUM(wo.OrderQty)", say: [units built, quantity manufactured]}
+      units_scrapped:   {sql: "SUM(wo.ScrappedQty)", say: [units scrapped, scrap]}
+      scrap_rate:       {sql: "ROUND(SUM(wo.ScrappedQty)::numeric / NULLIF(SUM(wo.OrderQty), 0), 4)", say: [scrap rate]}
+      avg_build_days:  {sql: "AVG(wo.EndDate::date - wo.StartDate::date)", say: [average build time in days, average days to complete]}
+      late_work_orders: {sql: "COUNT(*) FILTER (WHERE wo.EndDate > wo.DueDate)", say: [late work orders, work orders finished late]}
+  inventory:
+    base: inv
+    describe: one row per product per storage location
+    measures:
+      stock_on_hand:   {sql: "SUM(inv.Quantity)", say: [stock, inventory, quantity on hand, units in stock]}
+      stock_locations: {sql: "COUNT(*)", say: [number of stock locations, bins in use]}
+  products:
+    base: prod
+    describe: the product list (no sales)
+    measures:
+      product_count:   {sql: "COUNT(*)", say: [number of products, how many products]}
+      avg_list_price:  {sql: "AVG(prod.ListPrice)", say: [average price, average list price]}
+      max_list_price:  {sql: "MAX(prod.ListPrice)", say: [highest price, most expensive price]}
+      min_list_price:  {sql: "MIN(prod.ListPrice)", say: [lowest price, cheapest price]}
+      avg_standard_cost: {sql: "AVG(prod.StandardCost)", say: [average cost]}
+      avg_weight:      {sql: "AVG(prod.Weight)", say: [average weight]}
+      avg_safety_stock: {sql: "AVG(prod.SafetyStockLevel)", say: [average safety stock level]}
+  customers:
+    base: cust
+    describe: the customer list (no sales)
+    measures:
+      customer_count:  {sql: "COUNT(*)", say: [number of customers, how many customers]}
+      avg_yearly_purchases: {sql: "AVG(cust_demo.TotalPurchaseYTD)", say: [average purchases year to date per customer]}
+      avg_customer_age: {sql: "AVG(EXTRACT(YEAR FROM age(CURRENT_DATE, cust_demo.BirthDate)))", say: [average customer age]}
+      avg_children:    {sql: "AVG(cust_demo.TotalChildren)", say: [average number of children]}
+      avg_cars:        {sql: "AVG(cust_demo.NumberCarsOwned)", say: [average cars owned]}
+  employees:
+    base: emp
+    date: emp.HireDate
+    describe: current employees (the profile shows every employee is current)
+    measures:
+      headcount:          {sql: "COUNT(*)", say: [number of employees, headcount, staff count]}
+      avg_vacation_hours: {sql: "AVG(emp.VacationHours)", say: [average vacation hours]}
+      avg_sick_hours:     {sql: "AVG(emp.SickLeaveHours)", say: [average sick leave]}
+      avg_pay_rate:      {sql: "AVG(cur_pay.Rate)", say: [average pay rate, average hourly rate, average pay]}
+      max_pay_rate:      {sql: "MAX(cur_pay.Rate)", say: [highest pay rate, top pay rate]}
+      min_pay_rate:      {sql: "MIN(cur_pay.Rate)", say: [lowest pay rate]}
+      avg_age:           {sql: "AVG(EXTRACT(YEAR FROM age(CURRENT_DATE, emp.BirthDate)))", say: [average age]}
+      total_vacation_hours: {sql: "SUM(emp.VacationHours)", say: [total vacation hours, vacation hours owed]}
+  vendors:
+    base: vendor
+    describe: the vendor list
+    measures:
+      vendor_count:    {sql: "COUNT(*)", say: [number of vendors, how many suppliers]}
+  # ---- added for full coverage (round 3) ----
+  order_reasons:
+    base: sohr
+    date: soh.OrderDate
+    describe: one row per reason a customer gave for an order (an order can give several)
+    measures:
+      order_count:     {sql: "COUNT(DISTINCT sohr.SalesOrderID)", say: [number of orders]}
+      revenue:         {sql: "SUM(soh.SubTotal)", say: [sales, revenue]}
+      reason_count:    {sql: "COUNT(*)", say: [times given, number of times a reason was cited, mentions]}
+  sales_people:
+    base: sp
+    describe: the sales people with their quota, bonus, commission and year-to-date sales as stored
+    list: {entity: sales_person, attrs: [sales_quota, bonus, commission_pct, sales_ytd, sales_last_year, territory]}
+    measures:
+      sales_person_count:  {sql: "COUNT(*)", say: [number of sales people, how many sales reps]}
+      rep_sales_ytd:       {sql: "SUM(sp.SalesYTD)", say: [sales year to date for sales people, sales reps' YTD sales]}
+      rep_sales_last_year: {sql: "SUM(sp.SalesLastYear)", say: [sales people's sales last year as recorded]}
+      total_bonus:         {sql: "SUM(sp.Bonus)", say: [total bonus, bonuses]}
+      avg_bonus:           {sql: "AVG(sp.Bonus)", say: [average bonus]}
+      avg_commission:      {sql: "AVG(sp.CommissionPct)", say: [average commission rate, average commission]}
+      total_quota:         {sql: "SUM(sp.SalesQuota)", say: [total sales quota, quota]}
+  quotas:
+    base: quota
+    date: quota.QuotaDate
+    describe: one row per sales person per quota period
+    measures:
+      quota_amount:    {sql: "SUM(quota.SalesQuota)", say: [quota amount, sales quota, sales targets]}
+      quota_count:     {sql: "COUNT(*)", say: [number of quotas set]}
+      avg_quota:       {sql: "AVG(quota.SalesQuota)", say: [average quota]}
+  territories:
+    base: terr
+    describe: the sales territories with their year-to-date and last-year sales and cost as stored
+    list: {entity: territory, attrs: [territory_group, territory_country, territory_sales_ytd, territory_sales_last_year, territory_cost_ytd, territory_cost_last_year]}
+    measures:
+      territory_count:           {sql: "COUNT(*)", say: [number of territories]}
+      territory_sales_ytd:       {sql: "SUM(terr.SalesYTD)", say: [territory sales year to date as recorded]}
+      territory_sales_last_year: {sql: "SUM(terr.SalesLastYear)", say: [territory sales last year as recorded]}
+      territory_cost_ytd:        {sql: "SUM(terr.CostYTD)", say: [territory cost year to date]}
+      territory_cost_last_year:  {sql: "SUM(terr.CostLastYear)", say: [territory cost last year]}
+  territory_assignments:
+    base: sth
+    date: sth.StartDate
+    describe: which sales person covered which territory, and when
+    measures:
+      assignment_count: {sql: "COUNT(*)", say: [number of territory assignments]}
+  currency_rates:
+    base: fxrate
+    date: fxrate.CurrencyRateDate
+    describe: daily exchange rates from US dollars
+    measures:
+      avg_exchange_rate: {sql: "AVG(fxrate.AverageRate)", say: [average exchange rate, exchange rate]}
+      avg_closing_rate:  {sql: "AVG(fxrate.EndOfDayRate)", say: [end of day rate, closing rate]}
+      max_exchange_rate: {sql: "MAX(fxrate.AverageRate)", say: [highest exchange rate]}
+      min_exchange_rate: {sql: "MIN(fxrate.AverageRate)", say: [lowest exchange rate]}
+      rate_count:        {sql: "COUNT(*)", say: [number of rates recorded]}
+  country_currencies:
+    base: ccur
+    describe: which currency each country uses
+    measures:
+      currency_country_count: {sql: "COUNT(*)", say: [number of countries using a currency]}
+  tax_rates:
+    base: taxr
+    describe: sales tax rates by state or province
+    list: {entity: tax_rate_name, attrs: [tax_rate, tax_type, ship_state]}
+    measures:
+      avg_tax_rate:    {sql: "AVG(taxr.TaxRate)", say: [average tax rate]}
+      max_tax_rate:    {sql: "MAX(taxr.TaxRate)", say: [highest tax rate]}
+      min_tax_rate:    {sql: "MIN(taxr.TaxRate)", say: [lowest tax rate]}
+      tax_rate_count:  {sql: "COUNT(*)", say: [number of tax rates]}
+  cart_items:
+    base: cart
+    date: cart.DateCreated
+    describe: items sitting in online shopping carts
+    measures:
+      cart_item_count: {sql: "COUNT(*)", say: [number of cart items, items in shopping carts]}
+      cart_units:      {sql: "SUM(cart.Quantity)", say: [units in carts, quantity in shopping carts]}
+  offer_products:
+    base: sop
+    describe: which products each special offer applies to
+    measures:
+      offer_product_count: {sql: "COUNT(*)", say: [number of products on offer, products covered by promotions]}
+  credit_cards:
+    base: pcc
+    describe: credit cards on file for people
+    measures:
+      card_count:      {sql: "COUNT(*)", say: [number of credit cards, cards on file]}
+  people:
+    base: per
+    describe: everyone in the database (customers, employees, store and vendor contacts)
+    list: {entity: person, attrs: [person_type, title, email, phone, phone_type, email_promotion]}
+    measures:
+      person_count:    {sql: "COUNT(*)", say: [number of people, how many people]}
+  addresses:
+    base: bea
+    describe: addresses of people, stores and vendors, by address type
+    measures:
+      address_count:   {sql: "COUNT(*)", say: [number of addresses]}
+  contacts:
+    base: bec
+    describe: contact people at stores and vendors, with their role
+    list: {entity: contact, attrs: [contact_type, store, vendor]}
+    measures:
+      contact_count:   {sql: "COUNT(*)", say: [number of contacts]}
+  pay_changes:
+    base: eph
+    date: eph.RateChangeDate
+    describe: every pay rate change for every employee
+    measures:
+      pay_change_count: {sql: "COUNT(*)", say: [number of pay changes, raises]}
+      avg_rate_set:    {sql: "AVG(eph.Rate)", say: [average new pay rate]}
+  department_history:
+    base: edh_all
+    date: edh_all.StartDate
+    describe: every department an employee has worked in, with start and end dates
+    measures:
+      department_moves: {sql: "COUNT(*)", say: [number of department assignments, department moves]}
+  job_candidates:
+    base: jc
+    describe: job applicants and their resumes
+    list: {entity: candidate, attrs: [candidate_education, candidate_major, candidate_last_job, candidate_last_employer, candidate_city, candidate_email]}
+    measures:
+      candidate_count: {sql: "COUNT(*)", say: [number of job candidates, applicants]}
+  bill_of_materials:
+    base: bom
+    date: bom.StartDate
+    describe: which components go into which assembly, and how many
+    measures:
+      component_count: {sql: "COUNT(*)", say: [number of components, parts count]}
+      component_qty:   {sql: "SUM(bom.PerAssemblyQty)", say: [component quantity, parts needed]}
+  model_descriptions:
+    base: pmpdc
+    describe: product model descriptions in each language
+    measures:
+      description_count: {sql: "COUNT(*)", say: [number of descriptions, translations]}
+  documents:
+    base: doc
+    describe: product manuals and maintenance documents
+    list: {entity: document, attrs: [document_status, document_file, document_revision, change_number, document_folder, employee]}
+    measures:
+      document_count:  {sql: "COUNT(*)", say: [number of documents]}
+  product_documents:
+    base: pdoc
+    describe: which documents belong to which product
+    measures:
+      product_document_count: {sql: "COUNT(*)", say: [number of product documents]}
+  model_illustrations:
+    base: pmi
+    describe: which illustrations belong to which product model
+    measures:
+      illustration_count: {sql: "COUNT(*)", say: [number of illustrations]}
+  cost_history:
+    base: pch
+    date: pch.StartDate
+    describe: standard cost of each product over time
+    measures:
+      cost_change_count: {sql: "COUNT(*)", say: [number of cost changes]}
+      avg_historic_cost: {sql: "AVG(pch.StandardCost)", say: [average historical cost]}
+  price_history:
+    base: plph
+    date: plph.StartDate
+    describe: list price of each product over time
+    measures:
+      price_change_count: {sql: "COUNT(*)", say: [number of price changes]}
+      avg_historic_price: {sql: "AVG(plph.ListPrice)", say: [average historical list price]}
+  reviews:
+    base: rev
+    date: rev.ReviewDate
+    describe: product reviews written by customers
+    list: {entity: reviewer, attrs: [product, rating, review_comments, reviewer_email]}
+    measures:
+      review_count:    {sql: "COUNT(*)", say: [number of reviews]}
+      avg_rating:      {sql: "AVG(rev.Rating)", say: [average rating, average review score]}
+  transactions:
+    base: th
+    date: th.TransactionDate
+    describe: every stock movement (sales, purchases, work orders), current and archived
+    measures:
+      transaction_count: {sql: "COUNT(*)", say: [number of transactions, stock movements]}
+      transaction_qty:   {sql: "SUM(th.Quantity)", say: [quantity moved, transaction quantity]}
+      transaction_value: {sql: "SUM(th.Quantity * th.ActualCost)", say: [transaction value, value of stock movements]}
+  routing:
+    base: wor
+    date: wor.ScheduledStartDate
+    describe: each manufacturing step of a work order at a work center
+    measures:
+      operation_count: {sql: "COUNT(*)", say: [number of operations, manufacturing steps]}
+      resource_hours:  {sql: "SUM(wor.ActualResourceHrs)", say: [machine hours, resource hours, hours worked]}
+      planned_cost:    {sql: "SUM(wor.PlannedCost)", say: [planned cost, budgeted manufacturing cost]}
+      actual_cost:     {sql: "SUM(wor.ActualCost)", say: [actual cost, manufacturing cost]}
+      cost_overrun:    {sql: "SUM(wor.ActualCost - wor.PlannedCost)", say: [cost overrun, cost variance]}
+      avg_delay_days:  {sql: "AVG(wor.ActualEndDate::date - wor.ScheduledEndDate::date)", say: [average delay in days, average days late]}
+  vendor_products:
+    base: pv
+    date: pv.LastReceiptDate
+    describe: which vendor supplies which product, at what price and lead time
+    measures:
+      vendor_product_count: {sql: "COUNT(*)", say: [number of products supplied, supplied products]}
+      avg_lead_time:       {sql: "AVG(pv.AverageLeadTime)", say: [average lead time, lead time]}
+      avg_vendor_price:    {sql: "AVG(pv.StandardPrice)", say: [average vendor price]}
+      avg_receipt_cost:    {sql: "AVG(pv.LastReceiptCost)", say: [average last receipt cost]}
+      units_on_order:      {sql: "SUM(pv.OnOrderQty)", say: [units on order, quantity on order]}
+
+# Dimensions: things to group by, filter on, or show. `node` is where the column lives;
+# a dimension is usable from any fact whose base reaches that node through the joins.
+# `decode` turns codes into words. No data values live here: aq looks names up in the database
+# when a question is asked. `values` appears only where the catalog's own CASE defines them.
+dimensions:
+  # products
+  product:         {node: prod, sql: "prod.Name", say: [product, item]}
+  product_number:  {node: prod, sql: "prod.ProductNumber", say: [product number, SKU]}
+  color:           {node: prod, sql: "prod.Color", say: [color, colour]}
+  product_line:    {node: prod, sql: "prod.ProductLine", say: [product line], decode: {R: Road, M: Mountain, T: Touring, S: Standard}}
+  product_class:   {node: prod, sql: "prod.Class", say: [class, quality class], decode: {H: High, M: Medium, L: Low}}
+  product_style:   {node: prod, sql: "prod.Style", say: [style], decode: {W: Womens, M: Mens, U: Universal}}
+  subcategory:     {node: psub, sql: "psub.Name", say: [subcategory, product type]}
+  category:        {node: pcat, sql: "pcat.Name", say: [category, product category]}
+  model:           {node: pmodel, sql: "pmodel.Name", say: [model, product model]}
+  list_price:      {node: prod, sql: "prod.ListPrice", kind: number, say: [price, list price]}
+  standard_cost:   {node: prod, sql: "prod.StandardCost", kind: number, say: [cost, standard cost]}
+  weight:          {node: prod, sql: "prod.Weight", kind: number, say: [weight]}
+  days_to_manufacture: {node: prod, sql: "prod.DaysToManufacture", kind: number, say: [days to manufacture, build time]}
+  # customers and channel
+  customer:        {node: [cust, store, cust_person], sql: "COALESCE(store.Name, cust_person.FirstName || ' ' || cust_person.LastName)", say: [customer, client, buyer]}
+  customer_type:   {node: cust, sql: "CASE WHEN cust.StoreID IS NOT NULL THEN 'Store' ELSE 'Individual' END", say: [customer type], values: [Store, Individual]}
+  store:           {node: store, sql: "store.Name", say: [store, reseller, shop]}
+  channel:         {node: soh, sql: "CASE WHEN soh.OnlineOrderFlag THEN 'Online' ELSE 'Reseller' END", say: [channel, sales channel], values: [Online, Reseller]}
+  # geography. REVIEW: "territory" is where the sale was booked (order's territory);
+  # "ship country/state/city" is where it was delivered. They usually agree.
+  territory:       {node: terr, sql: "terr.Name", say: [territory, sales territory, region]}
+  territory_group: {node: terr, sql: "terr.\"group\"", say: [continent, geographic group, market]}
+  territory_country: {node: terr, sql: "terr.CountryRegionCode", say: [country code]}
+  ship_country:    {node: ship_country, sql: "ship_country.Name", say: [country, ship-to country]}
+  ship_state:      {node: ship_state, sql: "ship_state.Name", say: [state, province, ship-to state]}
+  ship_city:       {node: ship_addr, sql: "ship_addr.City", say: [city, ship-to city]}
+  ship_method:     {node: shipm, sql: "shipm.Name", say: [shipping method, carrier]}
+  # people
+  sales_person:    {node: [sp, sp_person], sql: "sp_person.FirstName || ' ' || sp_person.LastName", say: [sales person, sales rep, salesperson]}
+  employee:        {node: emp_person, sql: "emp_person.FirstName || ' ' || emp_person.LastName", say: [employee, staff member]}
+  job_title:       {node: emp, sql: "emp.JobTitle", say: [job title, role, position]}
+  department:      {node: dept, sql: "dept.Name", say: [department]}
+  department_group: {node: dept, sql: "dept.GroupName", say: [department group, division]}
+  shift:           {node: shift, sql: "shift.Name", say: [shift]}
+  gender:          {node: emp, sql: "emp.Gender", say: [gender], decode: {M: Male, F: Female}}
+  marital_status:  {node: emp, sql: "emp.MaritalStatus", say: [marital status], decode: {M: Married, S: Single}}
+  pay_type:        {node: emp, sql: "CASE WHEN emp.SalariedFlag THEN 'Salaried' ELSE 'Hourly' END", say: [pay type, salaried or hourly], values: [Salaried, Hourly]}
+  hire_date:       {node: emp, sql: "emp.HireDate", kind: date, say: [hire date, start date]}
+  vacation_hours:  {node: emp, sql: "emp.VacationHours", kind: number, say: [vacation hours]}
+  # promotions
+  special_offer:   {node: offer, sql: "offer.Description", say: [promotion, special offer, discount]}
+  offer_type:      {node: offer, sql: "offer.Type", say: [promotion type, discount type]}
+  # purchasing
+  vendor:          {node: vendor, sql: "vendor.Name", say: [vendor, supplier]}
+  vendor_rating:   {node: vendor, sql: "vendor.CreditRating", say: [credit rating, vendor rating], decode: {1: Superior, 2: Excellent, 3: Above average, 4: Average, 5: Below average}}
+  po_status:       {node: poh, sql: "poh.Status", say: [purchase order status], decode: {1: Pending, 2: Approved, 3: Rejected, 4: Complete}}
+  # manufacturing and stock
+  scrap_reason:    {node: scrap, sql: "scrap.Name", say: [scrap reason, failure reason]}
+  location:        {node: loc, sql: "loc.Name", say: [location, warehouse location]}
+  # ---- added for full coverage (round 3) ----
+  # kind: text = free text or identifiers: shown and searched with "like", never grouped or matched as values.
+  # products
+  size:            {node: prod, sql: "prod.Size", say: [size]}
+  size_unit:       {node: um_size, sql: "um_size.Name", say: [size unit]}
+  weight_unit:     {node: um_weight, sql: "um_weight.Name", say: [weight unit]}
+  safety_stock:    {node: prod, sql: "prod.SafetyStockLevel", kind: number, say: [safety stock level, minimum stock]}
+  reorder_point:   {node: prod, sql: "prod.ReorderPoint", kind: number, say: [reorder point]}
+  sell_start_date: {node: prod, sql: "prod.SellStartDate::date", kind: date, say: [sell start date, launch date, date first sold]}
+  sell_end_date:   {node: prod, sql: "prod.SellEndDate::date", kind: date, say: [sell end date, date it stopped selling]}
+  discontinued_date: {node: prod, sql: "prod.DiscontinuedDate::date", kind: date, say: [discontinued date]}
+  photo_file:      {node: prod_photo, sql: "prod_photo.LargePhotoFileName", kind: text, say: [photo file, picture file name]}
+  thumbnail_file:  {node: prod_photo, sql: "prod_photo.ThumbnailPhotoFileName", kind: text, say: [thumbnail file]}
+  model_summary:   {node: model_info, sql: "model_info.Summary", kind: text, say: [model summary, catalog summary]}
+  warranty:        {node: model_info, sql: "model_info.WarrantyPeriod", say: [warranty, warranty period]}
+  maintenance_years: {node: model_info, sql: "model_info.MaintenanceYears", say: [maintenance contract length]}
+  product_description: {node: model_desc_en, sql: "model_desc_en.Description", kind: text, say: [description, product description]}
+  description:     {node: pdesc, sql: "pdesc.Description", kind: text, say: [description text, translated description]}
+  language:        {node: culture, sql: "culture.Name", say: [language, culture]}
+  # orders
+  order_number:    {node: soh, sql: "soh.SalesOrderID", kind: number, say: [order number, sales order number]}
+  order_status:    {node: soh, sql: "soh.Status", say: [order status], decode: {1: In process, 2: Approved, 3: Backordered, 4: Rejected, 5: Shipped, 6: Cancelled}}
+  order_due_date:  {node: soh, sql: "soh.DueDate::date", kind: date, say: [due date]}
+  order_ship_date: {node: soh, sql: "soh.ShipDate::date", kind: date, say: [ship date, shipping date]}
+  order_revision:  {node: soh, sql: "soh.RevisionNumber", kind: number, say: [order revision number]}
+  customer_po_number: {node: soh, sql: "soh.PurchaseOrderNumber", kind: text, say: [customer purchase order number, PO number on the order]}
+  account_number:  {node: soh, sql: "soh.AccountNumber", kind: text, say: [account number, customer account number]}
+  order_comment:   {node: soh, sql: "soh.Comment", kind: text, say: [order comment, note on the order]}
+  tracking_number: {node: sod, sql: "sod.CarrierTrackingNumber", kind: text, say: [tracking number, carrier tracking number]}
+  unit_price:      {node: sod, sql: "sod.UnitPrice", kind: number, say: [selling price, unit price]}
+  unit_discount:   {node: sod, sql: "sod.UnitPriceDiscount", kind: number, say: [discount rate on the line, line discount]}
+  card_type:       {node: card, sql: "card.CardType", say: [card type, credit card type, payment card]}
+  currency:        {node: currency, sql: "COALESCE(currency.Name, 'US Dollar')", say: [currency]}  # orders with no rate are in dollars
+  currency_code:   {node: currency, sql: "currency.CurrencyCode", say: [currency code]}
+  from_currency:   {node: fxrate, sql: "fxrate.FromCurrencyCode", say: [base currency]}
+  sales_reason:    {node: sreason, sql: "sreason.Name", say: [sales reason, reason for buying, purchase reason]}
+  reason_type:     {node: sreason, sql: "sreason.ReasonType", say: [reason type, kind of reason]}
+  billing_city:    {node: bill_addr, sql: "bill_addr.City", say: [billing city, bill-to city]}
+  billing_state:   {node: bill_state, sql: "bill_state.Name", say: [billing state, bill-to state]}
+  billing_country: {node: bill_country, sql: "bill_country.Name", say: [billing country, bill-to country]}
+  postal_code:     {node: ship_addr, sql: "ship_addr.PostalCode", say: [postal code, zip code]}
+  address_line:    {node: ship_addr, sql: "concat_ws(', ', ship_addr.AddressLine1, ship_addr.AddressLine2)", kind: text, say: [street address, address]}
+  state_code:      {node: ship_state, sql: "ship_state.StateProvinceCode", say: [state code, province code]}
+  country_code:    {node: ship_country, sql: "ship_country.CountryRegionCode", say: [ISO country code]}
+  address_type:    {node: addrtype, sql: "addrtype.Name", say: [address type]}
+  address_owner:   {node: [addr_person, store, vendor], sql: "COALESCE(store.Name, vendor.Name, addr_person.FirstName || ' ' || addr_person.LastName)", say: [address owner, who lives there]}
+  # promotions
+  discount_pct:    {node: offer, sql: "offer.DiscountPct", kind: number, say: [discount percentage, discount rate]}
+  offer_category:  {node: offer, sql: "offer.Category", say: [promotion category, offer audience]}
+  offer_start_date: {node: offer, sql: "offer.StartDate::date", kind: date, say: [promotion start date]}
+  offer_end_date:  {node: offer, sql: "offer.EndDate::date", kind: date, say: [promotion end date]}
+  offer_min_qty:   {node: offer, sql: "offer.MinQty", kind: number, say: [minimum quantity for the promotion]}
+  offer_max_qty:   {node: offer, sql: "offer.MaxQty", kind: number, say: [maximum quantity for the promotion]}
+  # sales people and territories (stored figures)
+  sales_quota:     {node: sp, sql: "sp.SalesQuota", kind: number, say: [sales quota, quota]}
+  bonus:           {node: sp, sql: "sp.Bonus", kind: number, say: [bonus]}
+  commission_pct:  {node: sp, sql: "sp.CommissionPct", kind: number, say: [commission rate, commission percentage]}
+  sales_ytd:       {node: sp, sql: "sp.SalesYTD", kind: number, say: [sales year to date, YTD sales]}
+  sales_last_year: {node: sp, sql: "sp.SalesLastYear", kind: number, say: [sales last year]}
+  quota_date:      {node: quota, sql: "quota.QuotaDate::date", kind: date, say: [quota date, quota period]}
+  quota_value:     {node: quota, sql: "quota.SalesQuota", kind: number, say: [quota for the period]}
+  territory_sales_ytd:       {node: terr, sql: "terr.SalesYTD", kind: number, say: [territory sales year to date]}
+  territory_sales_last_year: {node: terr, sql: "terr.SalesLastYear", kind: number, say: [territory sales last year]}
+  territory_cost_ytd:        {node: terr, sql: "terr.CostYTD", kind: number, say: [territory cost year to date]}
+  territory_cost_last_year:  {node: terr, sql: "terr.CostLastYear", kind: number, say: [territory cost last year]}
+  assignment_start: {node: sth, sql: "sth.StartDate::date", kind: date, say: [assignment start date, started covering]}
+  assignment_end:  {node: sth, sql: "sth.EndDate::date", kind: date, say: [assignment end date, stopped covering]}
+  # tax and carts
+  tax_rate:        {node: taxr, sql: "taxr.TaxRate", kind: number, say: [tax rate]}
+  tax_type:        {node: taxr, sql: "taxr.TaxType", say: [tax type], decode: {1: Retail, 2: Wholesale, 3: Retail and wholesale}}
+  tax_rate_name:   {node: taxr, sql: "taxr.Name", say: [tax name, tax]}
+  cart_id:         {node: cart, sql: "cart.ShoppingCartID", kind: text, say: [shopping cart, cart id]}
+  # people
+  person:          {node: per, sql: "per.FirstName || ' ' || per.LastName", say: [person, name, contact name]}
+  full_name:       {node: per, sql: "concat_ws(' ', per.Title, per.FirstName, per.MiddleName, per.LastName, per.Suffix)", kind: text, say: [full name]}
+  person_type:     {node: per, sql: "per.PersonType", say: [person type, kind of person], decode: {SC: Store contact, IN: Individual customer, SP: Sales person, EM: Employee, VC: Vendor contact, GC: General contact}}
+  title:           {node: per, sql: "per.Title", say: [title, salutation]}
+  email_promotion: {node: per, sql: "per.EmailPromotion", say: [email preference, email promotion setting], decode: {0: No email, 1: AdventureWorks email only, 2: AdventureWorks and partner email}}
+  email:           {node: per_email, sql: "per_email.EmailAddress", kind: text, say: [email, email address]}
+  phone:           {node: per_phone, sql: "per_phone.PhoneNumber", kind: text, say: [phone, phone number]}
+  phone_type:      {node: phone_type, sql: "phone_type.Name", say: [phone type]}
+  customer_email:  {node: cust_email, sql: "cust_email.EmailAddress", kind: text, say: [customer email, email]}
+  customer_phone:  {node: cust_phone, sql: "cust_phone.PhoneNumber", kind: text, say: [customer phone, phone number]}
+  employee_email:  {node: emp_email, sql: "emp_email.EmailAddress", kind: text, say: [employee email, work email]}
+  employee_phone:  {node: emp_phone, sql: "emp_phone.PhoneNumber", kind: text, say: [employee phone, phone number]}
+  contact:         {node: contact, sql: "contact.FirstName || ' ' || contact.LastName", say: [contact, contact person]}
+  contact_type:    {node: ctype, sql: "ctype.Name", say: [contact role, contact type]}
+  # customers (from the individual customer survey and addresses)
+  customer_city:   {node: cust_loc, sql: "cust_loc.City", say: [customer city, city the customer lives in]}
+  customer_state:  {node: cust_loc, sql: "cust_loc.State", say: [customer state, customer province]}
+  customer_country: {node: cust_loc, sql: "cust_loc.Country", say: [customer country, country the customer is in]}
+  customer_postal_code: {node: cust_loc, sql: "cust_loc.PostalCode", kind: text, say: [customer postal code]}
+  customer_address: {node: cust_loc, sql: "concat_ws(', ', cust_loc.AddressLine1, cust_loc.AddressLine2)", kind: text, say: [customer address]}
+  yearly_income:   {node: cust_demo, sql: "cust_demo.YearlyIncome", say: [yearly income, income bracket, income]}
+  occupation:      {node: cust_demo, sql: "cust_demo.Occupation", say: [occupation, job]}
+  education:       {node: cust_demo, sql: "cust_demo.Education", say: [education, education level]}
+  customer_gender: {node: cust_demo, sql: "cust_demo.Gender", say: [customer gender], decode: {M: Male, F: Female}}
+  customer_marital_status: {node: cust_demo, sql: "cust_demo.MaritalStatus", say: [customer marital status], decode: {M: Married, S: Single}}
+  customer_birth_date: {node: cust_demo, sql: "cust_demo.BirthDate", kind: date, say: [customer birth date, birthday]}
+  customer_age:    {node: cust_demo, sql: "EXTRACT(YEAR FROM age(CURRENT_DATE, cust_demo.BirthDate))::int", kind: number, say: [customer age, age]}
+  children:        {node: cust_demo, sql: "cust_demo.TotalChildren", kind: number, say: [number of children, children]}
+  children_at_home: {node: cust_demo, sql: "cust_demo.NumberChildrenAtHome", kind: number, say: [children at home]}
+  cars_owned:      {node: cust_demo, sql: "cust_demo.NumberCarsOwned", kind: number, say: [cars owned, number of cars]}
+  commute_distance: {node: cust_demo, sql: "cust_demo.CommuteDistance", say: [commute distance, commute]}
+  first_purchase_date: {node: cust_demo, sql: "cust_demo.DateFirstPurchase", kind: date, say: [date of first purchase]}
+  purchases_ytd:   {node: cust_demo, sql: "cust_demo.TotalPurchaseYTD", kind: number, say: [purchases year to date from the survey]}
+  # stores (from the store survey)
+  store_annual_sales:   {node: store_demo, sql: "store_demo.AnnualSales", kind: number, say: [store annual sales, store's yearly sales]}
+  store_annual_revenue: {node: store_demo, sql: "store_demo.AnnualRevenue", kind: number, say: [store annual revenue]}
+  store_bank:      {node: store_demo, sql: "store_demo.BankName", say: [store's bank, bank]}
+  store_business_type: {node: store_demo, sql: "store_demo.BusinessType", say: [store business type], decode: {BM: Bike manufacturer, BS: Bike store, OS: Online store}}
+  store_year_opened: {node: store_demo, sql: "store_demo.YearOpened", kind: number, say: [year the store opened, year opened]}
+  store_specialty: {node: store_demo, sql: "store_demo.Specialty", say: [store specialty, specialty]}
+  store_square_feet: {node: store_demo, sql: "store_demo.SquareFeet", kind: number, say: [store size in square feet, square feet]}
+  store_brands:    {node: store_demo, sql: "store_demo.Brands", say: [number of brands carried, brands]}
+  store_internet:  {node: store_demo, sql: "store_demo.Internet", say: [internet connection]}
+  store_employees: {node: store_demo, sql: "store_demo.NumberEmployees", kind: number, say: [store staff count, employees at the store]}
+  # employees
+  birth_date:      {node: emp, sql: "emp.BirthDate", kind: date, say: [birth date, date of birth]}
+  age:             {node: emp, sql: "EXTRACT(YEAR FROM age(CURRENT_DATE, emp.BirthDate))::int", kind: number, say: [age, employee age]}
+  sick_leave_hours: {node: emp, sql: "emp.SickLeaveHours", kind: number, say: [sick leave hours, sick hours]}
+  login:           {node: emp, sql: "emp.LoginID", kind: text, say: [login, user name]}
+  org_level:       {node: emp, sql: "length(emp.OrganizationNode) - length(replace(emp.OrganizationNode, '/', '')) - 1", kind: number, say: [organization level, management level]}
+  manager:         {node: emp_mgr, sql: "emp_mgr.ManagerName", say: [manager, boss, supervisor]}
+  pay_rate:        {node: cur_pay, sql: "cur_pay.Rate", kind: number, say: [pay rate, hourly rate, pay]}
+  pay_frequency:   {node: cur_pay, sql: "cur_pay.PayFrequency", say: [pay frequency, how often paid], decode: {1: Monthly, 2: Biweekly}}
+  employee_city:   {node: emp_loc, sql: "emp_loc.City", say: [employee city, city they live in]}
+  employee_state:  {node: emp_loc, sql: "emp_loc.State", say: [employee state]}
+  employee_country: {node: emp_loc, sql: "emp_loc.Country", say: [employee country]}
+  department_start_date: {node: edh, sql: "edh.StartDate", kind: date, say: [date joined the department]}
+  shift_start:     {node: shift, sql: "shift.StartTime", kind: text, say: [shift start time]}
+  shift_end:       {node: shift, sql: "shift.EndTime", kind: text, say: [shift end time]}
+  rate_change_date: {node: eph, sql: "eph.RateChangeDate::date", kind: date, say: [date of the pay change]}
+  new_rate:        {node: eph, sql: "eph.Rate", kind: number, say: [new pay rate, rate after the change]}
+  dept_start_date: {node: edh_all, sql: "edh_all.StartDate", kind: date, say: [department start date]}
+  dept_end_date:   {node: edh_all, sql: "edh_all.EndDate", kind: date, say: [department end date, date they left the department]}
+  candidate:       {node: jc, sql: "jc.Name", say: [candidate, applicant, job candidate]}
+  candidate_email: {node: jc, sql: "jc.EMail", kind: text, say: [candidate email]}
+  candidate_skills: {node: jc, sql: "jc.Skills", kind: text, say: [skills, candidate skills]}
+  candidate_education: {node: jc, sql: "jc.EducationLevel", say: [candidate education level, degree level]}
+  candidate_major: {node: jc, sql: "jc.Major", say: [major, field of study]}
+  candidate_last_job: {node: jc, sql: "jc.LastJobTitle", say: [previous job title, last job]}
+  candidate_last_employer: {node: jc, sql: "jc.LastEmployer", say: [previous employer, last employer]}
+  candidate_city:  {node: jc, sql: "jc.City", say: [candidate city]}
+  # purchasing
+  buyer:           {node: buyer_person, sql: "buyer_person.FirstName || ' ' || buyer_person.LastName", say: [buyer, purchasing agent, purchaser]}
+  po_number:       {node: poh, sql: "poh.PurchaseOrderID", kind: number, say: [purchase order number, PO number]}
+  po_ship_date:    {node: poh, sql: "poh.ShipDate::date", kind: date, say: [purchase order ship date]}
+  po_revision:     {node: poh, sql: "poh.RevisionNumber", kind: number, say: [purchase order revision]}
+  po_line_due_date: {node: pod, sql: "pod.DueDate::date", kind: date, say: [purchase line due date, expected delivery date]}
+  purchase_price:  {node: pod, sql: "pod.UnitPrice", kind: number, say: [purchase price, price paid per unit]}
+  vendor_account:  {node: vendor, sql: "vendor.AccountNumber", kind: text, say: [vendor account number]}
+  vendor_website:  {node: vendor, sql: "vendor.PurchasingWebServiceURL", kind: text, say: [vendor website, web service URL]}
+  vendor_city:     {node: vendor_loc, sql: "vendor_loc.City", say: [vendor city, supplier city]}
+  vendor_state:    {node: vendor_loc, sql: "vendor_loc.State", say: [vendor state, supplier state]}
+  vendor_country:  {node: vendor_loc, sql: "vendor_loc.Country", say: [vendor country, supplier country]}
+  lead_time:       {node: pv, sql: "pv.AverageLeadTime", kind: number, say: [lead time, lead time in days]}
+  vendor_price:    {node: pv, sql: "pv.StandardPrice", kind: number, say: [vendor price, supplier price]}
+  last_receipt_cost: {node: pv, sql: "pv.LastReceiptCost", kind: number, say: [last receipt cost, last price paid]}
+  last_receipt_date: {node: pv, sql: "pv.LastReceiptDate::date", kind: date, say: [last receipt date, last delivery date]}
+  min_order_qty:   {node: pv, sql: "pv.MinOrderQty", kind: number, say: [minimum order quantity]}
+  max_order_qty:   {node: pv, sql: "pv.MaxOrderQty", kind: number, say: [maximum order quantity]}
+  on_order_qty:    {node: pv, sql: "pv.OnOrderQty", kind: number, say: [quantity on order]}
+  vendor_unit:     {node: um_vendor, sql: "um_vendor.Name", say: [unit of purchase, vendor unit of measure]}
+  ship_base:       {node: shipm, sql: "shipm.ShipBase", kind: number, say: [shipping base charge, minimum shipping charge]}
+  ship_rate:       {node: shipm, sql: "shipm.ShipRate", kind: number, say: [shipping rate per pound, ship rate]}
+  # manufacturing and stock
+  wo_due_date:     {node: wo, sql: "wo.DueDate::date", kind: date, say: [work order due date]}
+  wo_end_date:     {node: wo, sql: "wo.EndDate::date", kind: date, say: [work order end date, completion date]}
+  wo_start_date:   {node: wo, sql: "wo.StartDate::date", kind: date, say: [work order start date]}
+  operation_sequence: {node: wor, sql: "wor.OperationSequence", kind: number, say: [operation step, step number]}
+  scheduled_start: {node: wor, sql: "wor.ScheduledStartDate::date", kind: date, say: [scheduled start]}
+  scheduled_end:   {node: wor, sql: "wor.ScheduledEndDate::date", kind: date, say: [scheduled end]}
+  actual_start:    {node: wor, sql: "wor.ActualStartDate::date", kind: date, say: [actual start]}
+  actual_end:      {node: wor, sql: "wor.ActualEndDate::date", kind: date, say: [actual end]}
+  cost_rate:       {node: loc, sql: "loc.CostRate", kind: number, say: [hourly cost rate of the location, cost rate]}
+  availability:    {node: loc, sql: "loc.Availability", kind: number, say: [work center capacity, availability]}
+  shelf:           {node: inv, sql: "inv.Shelf", say: [shelf]}
+  bin:             {node: inv, sql: "inv.Bin", kind: number, say: [bin]}
+  assembly:        {node: asm, sql: "asm.Name", say: [assembly, parent product, finished product]}
+  bom_level:       {node: bom, sql: "bom.BOMLevel", kind: number, say: [bill of materials level, BOM level]}
+  per_assembly_qty: {node: bom, sql: "bom.PerAssemblyQty", kind: number, say: [quantity per assembly]}
+  bom_unit:        {node: um_bom, sql: "um_bom.Name", say: [component unit of measure]}
+  bom_start_date:  {node: bom, sql: "bom.StartDate::date", kind: date, say: [date the component was added]}
+  bom_end_date:    {node: bom, sql: "bom.EndDate::date", kind: date, say: [date the component was removed]}
+  historic_cost:   {node: pch, sql: "pch.StandardCost", kind: number, say: [cost at the time, historical cost]}
+  cost_start_date: {node: pch, sql: "pch.StartDate::date", kind: date, say: [cost start date]}
+  cost_end_date:   {node: pch, sql: "pch.EndDate::date", kind: date, say: [cost end date]}
+  historic_price:  {node: plph, sql: "plph.ListPrice", kind: number, say: [price at the time, historical price]}
+  price_start_date: {node: plph, sql: "plph.StartDate::date", kind: date, say: [price start date]}
+  price_end_date:  {node: plph, sql: "plph.EndDate::date", kind: date, say: [price end date]}
+  reviewer:        {node: rev, sql: "rev.ReviewerName", say: [reviewer]}
+  reviewer_email:  {node: rev, sql: "rev.EmailAddress", kind: text, say: [reviewer email]}
+  rating:          {node: rev, sql: "rev.Rating", kind: number, say: [rating, stars]}
+  review_comments: {node: rev, sql: "rev.Comments", kind: text, say: [review text, comments]}
+  review_date:     {node: rev, sql: "rev.ReviewDate::date", kind: date, say: [review date]}
+  transaction_type: {node: th, sql: "th.TransactionType", say: [transaction type], decode: {W: Work order, S: Sales order, P: Purchase order}}
+  reference_order: {node: th, sql: "th.ReferenceOrderID", kind: number, say: [reference order number]}
+  reference_line:  {node: th, sql: "th.ReferenceOrderLineID", kind: number, say: [reference line number]}
+  transaction_cost: {node: th, sql: "th.ActualCost", kind: number, say: [unit cost of the transaction]}
+  transaction_qty_each: {node: th, sql: "th.Quantity", kind: number, say: [quantity of the transaction]}
+  document:        {node: doc, sql: "doc.Title", say: [document, manual]}
+  document_file:   {node: doc, sql: "doc.FileName", kind: text, say: [file name, document file]}
+  file_extension:  {node: doc, sql: "doc.FileExtension", say: [file extension, file type]}
+  document_revision: {node: doc, sql: "trim(doc.Revision)", say: [document revision]}
+  change_number:   {node: doc, sql: "doc.ChangeNumber", kind: number, say: [change number]}
+  document_status: {node: doc, sql: "doc.Status", say: [document status], decode: {1: Pending approval, 2: Approved, 3: Obsolete}}
+  document_summary: {node: doc, sql: "doc.DocumentSummary", kind: text, say: [document summary]}
+  document_folder: {node: doc_folder, sql: "doc_folder.Title", say: [document folder, folder]}
+  illustration:    {node: illus, sql: "illus.IllustrationID", kind: number, say: [illustration number]}
+
+# Yes/no conditions people say in words.
+flags:
+  online:            {node: soh, sql: "soh.OnlineOrderFlag", say: [online, web orders, internet sales]}
+  reseller:          {node: soh, sql: "NOT soh.OnlineOrderFlag", say: [reseller, through sales reps, store orders]}
+  discounted:        {node: sod, sql: "sod.UnitPriceDiscount > 0", say: [discounted, sold on discount]}
+  currently_sold:    {node: prod, sql: "prod.SellEndDate IS NULL", say: [current products, still sold, active products]}
+  no_longer_sold:    {node: prod, sql: "prod.SellEndDate IS NOT NULL", say: [discontinued, no longer sold]}
+  salable:           {node: prod, sql: "prod.FinishedGoodsFlag", say: [finished goods, salable products]}
+  made_in_house:     {node: prod, sql: "prod.MakeFlag", say: [manufactured, made in-house]}
+  bought_in:         {node: prod, sql: "NOT prod.MakeFlag", say: [purchased parts, bought in]}
+  store_customer:    {node: cust, sql: "cust.StoreID IS NOT NULL", say: [store customers, resellers, business customers]}
+  individual_customer: {node: cust, sql: "cust.StoreID IS NULL", say: [individual customers, consumers, retail customers]}
+  salaried:          {node: emp, sql: "emp.SalariedFlag", say: [salaried]}
+  hourly:            {node: emp, sql: "NOT emp.SalariedFlag", say: [hourly]}
+  preferred_vendor:  {node: vendor, sql: "vendor.PreferredVendorStatus", say: [preferred vendors]}
+  active_vendor:     {node: vendor, sql: "vendor.ActiveFlag", say: [active vendors]}
+  has_scrap:         {node: wo, sql: "wo.ScrappedQty > 0", say: [with scrap, had failures]}
+  has_rejects:       {node: pod, sql: "pod.RejectedQty > 0", say: [with rejected items]}
+  # ---- added for full coverage (round 3) ----
+  shipped_late:      {node: soh, sql: "soh.ShipDate > soh.DueDate", say: [shipped late, late orders]}
+  foreign_currency:  {node: soh, sql: "soh.CurrencyRateID IS NOT NULL", say: [paid in a foreign currency]}
+  paid_by_card:      {node: soh, sql: "soh.CreditCardID IS NOT NULL", say: [paid by credit card]}
+  active_offer:      {node: offer, sql: "CURRENT_DATE BETWEEN offer.StartDate AND offer.EndDate", say: [current promotions, running promotions]}
+  current_employee:  {node: emp, sql: "emp.CurrentFlag", say: [current employees, active staff]}
+  homeowner:         {node: cust_demo, sql: "cust_demo.HomeOwnerFlag = '1'", say: [homeowners, own their home]}
+  hired_candidate:   {node: jc, sql: "jc.BusinessEntityID IS NOT NULL", say: [hired candidates, candidates we hired]}
+  current_assignment: {node: sth, sql: "sth.EndDate IS NULL", say: [current territory assignments]}
+  past_department:   {node: edh_all, sql: "edh_all.EndDate IS NOT NULL", say: [previous departments, departments they left]}
+  current_bom:       {node: bom, sql: "bom.EndDate IS NULL", say: [current components, components still in use]}
+  current_cost:      {node: pch, sql: "pch.EndDate IS NULL", say: [current cost]}
+  current_price:     {node: plph, sql: "plph.EndDate IS NULL", say: [current price]}
+  archived:          {node: th, sql: "th.Archived", say: [archived transactions, older transactions]}
+  late_work_order:   {node: wo, sql: "wo.EndDate > wo.DueDate", say: [finished late, late work orders]}
+  delayed_operation: {node: wor, sql: "wor.ActualEndDate > wor.ScheduledEndDate", say: [delayed operations, behind schedule]}
+  is_folder:         {node: doc, sql: "doc.FolderFlag", say: [folders]}
+  is_file:           {node: doc, sql: "NOT doc.FolderFlag", say: [files, actual documents]}
+  has_instructions:  {node: pmodel, sql: "pmodel.Instructions IS NOT NULL", say: [with manufacturing instructions]}
+  has_catalog_description: {node: pmodel, sql: "pmodel.CatalogDescription IS NOT NULL", say: [with a catalog description]}
+  primary_address:   {node: addrtype, sql: "addrtype.Name IN ('Primary', 'Main Office', 'Home')", say: [main addresses]}
+
+# Time words, matching the training data conventions (see make_dataset.py SYSTEM prompt).
+# {d} is the fact's date column. "last X" = previous calendar X; "past N X" = rolling window ending today.
+time:
+  grains:
+    year:    "EXTRACT(YEAR FROM {d})::int"
+    quarter: "EXTRACT(QUARTER FROM {d})::int"
+    month:   "DATE_TRUNC('month', {d})::date"
+    day:     "{d}::date"
+  periods:
+    today:        "{d} >= CURRENT_DATE AND {d} < CURRENT_DATE + 1"
+    this_month:   "{d} >= DATE_TRUNC('month', CURRENT_DATE) AND {d} < CURRENT_DATE + 1"
+    last_month:   "{d} >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '1 month' AND {d} < DATE_TRUNC('month', CURRENT_DATE)"
+    this_quarter: "{d} >= DATE_TRUNC('quarter', CURRENT_DATE) AND {d} < CURRENT_DATE + 1"
+    last_quarter: "{d} >= DATE_TRUNC('quarter', CURRENT_DATE) - INTERVAL '3 months' AND {d} < DATE_TRUNC('quarter', CURRENT_DATE)"
+    this_year:    "{d} >= DATE_TRUNC('year', CURRENT_DATE) AND {d} < CURRENT_DATE + 1"
+    last_year:    "{d} >= DATE_TRUNC('year', CURRENT_DATE) - INTERVAL '1 year' AND {d} < DATE_TRUNC('year', CURRENT_DATE)"
+    past_days:    "{d} >= CURRENT_DATE - INTERVAL '{n} days' AND {d} < CURRENT_DATE + 1"
+    past_months:  "{d} >= CURRENT_DATE - INTERVAL '{n} months' AND {d} < CURRENT_DATE + 1"
+    year:         "{d} >= DATE '{n}-01-01' AND {d} < DATE '{n}-01-01' + INTERVAL '1 year'"
+    between:      "{d} >= DATE '{from}' AND {d} < DATE '{to}' + 1"
+
+
+# The fixed answers for questions the database cannot answer. A plan {"not_tracked": reason}
+# must use one of these; aq rejects a made-up reason and asks the model again for a real query.
+not_tracked:
+  - "it records salaried or hourly pay, not full-time or part-time status"
+  - "it has no employee performance ratings"
+  - "it has no product returns or refunds"
+  - "it has no customer satisfaction or complaint data"
+  - "it has no website traffic data"
+  - "it has no marketing spend or budgets"
+  - "it records remaining sick leave and vacation hours, not absences or overtime"
+  - "it records ship dates, not delivery dates"
+  - "it has no competitor data"
+  - "it has no weather data"
+  - "it has no share price or financial market data"
+  - "it has no training or certification records"
+  - "it has no forecasts or budgets"
+  - "it has no operating expenses such as rent or utilities"
+  - "it has no customer churn or account closures"
+  - "it has no store visitor counts"
+  - "it does not record where employees work from"
+  - "it has no social media data"
+  - "it has no support tickets"
+  - "it has no record of languages employees speak"
+  - "national ID numbers are withheld for privacy"
+  - "card numbers are withheld for privacy"
+  - "passwords are withheld for security"
+  - "the question is not about the AdventureWorks data"
+
+# Columns deliberately left out of the catalog, with the reason. coverage.py reports any
+# column that is neither used by the catalog nor listed here. "*.Col" applies to every table.
+excluded:
+  "*.rowguid":                         replication id, no business meaning
+  "*.ModifiedDate":                    row edit timestamp, no business meaning
+  Person.Password:                     password hashes and salts (security)
+  Person.BusinessEntity:               ids only; the people, stores and vendors tables carry the meaning
+  HumanResources.Employee.NationalIDNumber: national ID numbers (sensitive)
+  Sales.CreditCard.CardNumber:         card numbers (sensitive)
+  Sales.CreditCard.ExpMonth:           card expiry (sensitive)
+  Sales.CreditCard.ExpYear:            card expiry (sensitive)
+  Sales.SalesOrderHeader.CreditCardApprovalCode: payment approval codes (sensitive)
+  Production.ProductPhoto.ThumbNailPhoto: image bytes
+  Production.ProductPhoto.LargePhoto:  image bytes
+  Production.Document.Document:        file bytes (the title, file name and summary are covered)
+  Production.Illustration.Diagram:     vector drawing markup
+  Production.ProductModel.Instructions: manufacturing instruction text (XML); only whether a model has them is covered
+  Person.Person.AdditionalContactInfo: free-form XML on 10 people
+  Person.Person.NameStyle:             always 0 (Western name order)
+  Person.Address.SpatialLocation:      encoded map coordinates
+  Person.StateProvince.IsOnlyStateProvinceFlag: technical flag
+  Person.StateProvince.TerritoryID:    the order's own territory is used instead
+  HumanResources.EmployeePayHistory.PayFrequency: same as the current pay frequency (pay_frequency)
+  Production.ProductProductPhoto.primary: every product has one primary photo
+  Production.TransactionHistory.TransactionID: row id
+  Production.TransactionHistoryArchive.TransactionID: row id
+  Sales.SalesOrderDetail.SalesOrderDetailID: row id
+  Purchasing.PurchaseOrderDetail.PurchaseOrderDetailID: row id
+  Production.BillOfMaterials.BillOfMaterialsID: row id
+  Sales.ShoppingCartItem.ShoppingCartItemID: row id
+  HumanResources.JobCandidate.JobCandidateID: row id
+  Production.Document.DocumentNode:    tree position; the folder is covered
+  Sales.SalesTaxRate.SalesTaxRateID:   row id
+  Person.EmailAddress.EmailAddressID:  row id (one email per person)
+  Production.ProductReview.ProductReviewID: row id

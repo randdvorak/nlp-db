@@ -1,0 +1,39 @@
+# Drafted by engine/profile_db.py; see databases/adventureworks/phrasing.yaml for every key.
+
+fact_weights:
+  actors: 2.15
+  addresses: 2.5
+  categories: 1.6
+  cities: 2.39
+  countries: 2.02
+  customers: 2.5
+  films: 2.5
+  film_actors: 2.87
+  film_categories: 2.69
+  inventories: 2.83
+  languages: 1.39
+  payments: 3.35
+  rentals: 3.36
+  staffs: 2.59
+  stores: 2.35
+id_dims:
+  store: ['for store {v}', 'at store {v}']
+not_tracked_questions:
+- reason: the question is not about the Pagila data
+  questions:
+  - what is the capital of France
+  - write me a poem
+  - how do I bake bread
+  - who won the world cup
+  - what time is it in Tokyo
+  - tell me a joke
+made_up_values:
+  groups:
+    people: [actor, customer, staff]
+    places: [address, address2, city, country]
+  shapes:
+    people: f'{word(pick([1, 2]))} {word(pick([2, 3]))}'
+    places: word(pick([2, 3])) + pick(['', '', 'ia', ' Falls', ' Coast', 'land', ' Bay'])
+  siblings:
+  - [people]
+  - [places]

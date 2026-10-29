@@ -15,6 +15,8 @@ it up in the database at question time and gives the model a hint line
 (`Values: territory=Canada`); training uses made-up values, so the model learns to copy hints
 rather than memorize data.
 
+Related work, and what is specific to dbq: [docs/RELATED_WORK.md](docs/RELATED_WORK.md).
+
 ## Layout
 
 ```

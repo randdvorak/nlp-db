@@ -268,17 +268,18 @@ final class PlanCompiler {
             return fl.sql
         }
         guard let name = f["dim"] as? String else { throw PlanError("filter needs a dim or a flag") }
-        let op = ((f["op"] as? String) ?? "=").lowercased()
+        guard let rawOp = f["op"] as? String else { throw PlanError("filter on '\(name)' needs an op") }
+        let op = rawOp.lowercased()
         if !Self.ops.contains(op) { throw PlanError("unknown operator '\(op)'") }
         let col: String
         if cat.grains[name] != nil { col = try dimExpr(name, fact) }
         else if let d = cat.dims[name] { col = d.sql }
         else { throw PlanError("unknown dimension '\(name)'") }
         if op == "is null" || op == "is not null" { return "\(col) \(op.uppercased())" }
-        let v = f["value"] ?? NSNull()
+        guard let v = f["value"], !(v is NSNull) else { throw PlanError("'\(op)' filter on '\(name)' needs a value") }
         switch op {
         case "in", "not in":
-            guard let list = v as? [Any] else { throw PlanError("'\(op)' needs a list") }
+            guard let list = v as? [Any], !list.isEmpty else { throw PlanError("'\(op)' needs a list") }
             return "\(col) \(op.uppercased()) (" + list.map { lit(filterValue(name, $0)) }.joined(separator: ", ") + ")"
         case "between":
             guard let list = v as? [Any], list.count >= 2 else { throw PlanError("'between' needs two values") }

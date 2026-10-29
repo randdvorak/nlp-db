@@ -129,6 +129,11 @@ LIST_WEIGHTS = PH.get("list_weights", {})  # others 1
 NO_TIME_FACTS = set(PH.get("no_time_facts", []))
 COUNT_MEASURES = set(PH.get("count_measures", []))
 OPPOSITE_FLAGS = [set(p) for p in PH.get("opposite_flags", [])]
+# Counting a fact grouped by its own entity ("actors by number of actors") is 1 per row:
+# skipped unless phrasing.yaml keeps it (AdventureWorks round 5 data had it). OWN_ENTITY:
+# fact -> dimensions on its base table with (nearly) one value per row (load_numbers).
+SKIP_OWN_ENTITY = PH.get("skip_own_entity", True)
+OWN_ENTITY = {}
 YEARS = PH.get("years")  # [first, last]; load_numbers fills it from the data when missing
 
 def reachable(fact, names):
@@ -319,6 +324,12 @@ def load_numbers(cur):
             if longest and longest <= 3:
                 CODE_LEN[d] = longest
     MANY.update(d for d in GROUPABLE if COUNTS.get(d, 0) > 30)
+    if SKIP_OWN_ENTITY:
+        for fact, f in CAT["facts"].items():
+            cur.execute(f"SELECT count(*) FROM {CAT['nodes'][f['base']]}")
+            rows = cur.fetchone()[0]
+            OWN_ENTITY[fact] = {d for d in DIMS if C.nodes_of(DIMS[d]) == [f["base"]]
+                                and (d in ID_DIMS or rows and COUNTS.get(d, 0) >= 0.9 * rows)}
     global YEARS
     if not YEARS:
         dates = [f["date"] for f in CAT["facts"].values() if f.get("date")]
@@ -405,6 +416,8 @@ def measure_plan(fact):
     if kind == "spend":
         return spend_plan(fact)
     groupable = reachable(fact, GROUPABLE)
+    if SKIP_OWN_ENTITY:
+        groupable = [g for g in groupable if g not in OWN_ENTITY.get(fact, ())]
     plan = {"measures": [m]}
     group = []
     if kind in ("breakdown", "top", "bottom", "having", "two_dims"):

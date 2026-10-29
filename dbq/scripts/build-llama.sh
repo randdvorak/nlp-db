@@ -1,8 +1,8 @@
 #!/bin/bash
-# Builds llama.cpp as static libraries for linking into aq, so the binary doesn't depend
+# Builds llama.cpp as static libraries for linking into dbq, so the binary doesn't depend
 # on a Homebrew llama.cpp (whose library ABI changes between releases).
 #   bash scripts/build-llama.sh            -> vendor/llama/{include,lib}
-# Pinned to the release aq was tested with. Needs cmake and Xcode.
+# Pinned to the release dbq was tested with. Needs cmake and Xcode.
 set -euo pipefail
 TAG="${LLAMA_TAG:-b11429}"   # llama.cpp 0.6.0, commit d812350
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,7 +14,7 @@ if [ ! -d "$SRC/.git" ]; then
 fi
 # Build through a space-free symlink: CMake splits compiler flags on spaces, and the
 # -ffile-prefix-map below needs the source path as one argument.
-TMP="${TMPDIR:-/tmp}"; LINK="${TMP%/}/aq-llama-src"
+TMP="${TMPDIR:-/tmp}"; LINK="${TMP%/}/dbq-llama-src"
 ln -sfn "$SRC" "$LINK"
 
 cmake -S "$LINK" -B "$LINK/build-static" \

@@ -8,7 +8,7 @@ question's phrases are values of a lookup dimension, and the matches become hint
 
 The hints go into the model's prompt, so the model copies real spellings instead of knowing
 them. Training uses made-up values (see gen_plans.py), so the model learns to copy, not the
-data. aq does the same in Swift (ValueMatcher), with the same query.
+data. dbq does the same in Swift (ValueMatcher), with the same query.
 
 Three kinds of lookup dimension, in catalog order (lookup_dims):
   db       values from the database, matched anywhere in the question

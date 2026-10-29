@@ -1,16 +1,16 @@
-# aq: ask a PostgreSQL database questions in English
+# dbq: ask a PostgreSQL database questions in English
 
 ```
-aq "how many vendors are in California"
-aq -n "sales by territory last year"      # print the SQL only
+dbq "how many vendors are in California"
+dbq -n "sales by territory last year"      # print the SQL only
 ```
 
-aq turns a question into a small JSON **plan** with a fine-tuned model (Qwen2.5-Coder-1.5B,
+dbq turns a question into a small JSON **plan** with a fine-tuned model (Qwen2.5-Coder-1.5B,
 run locally through llama.cpp), compiles the plan to **one read-only SELECT**, and runs it.
 It never writes: every connection is read-only, with a statement timeout.
 
 The model only knows the catalog's names: measures, dimensions, flags and periods. It never
-sees the database's own values. When a question names one ("Canada", "Ken Sánchez"), aq looks
+sees the database's own values. When a question names one ("Canada", "Ken Sánchez"), dbq looks
 it up in the database at question time and gives the model a hint line
 (`Values: territory=Canada`); training uses made-up values, so the model learns to copy hints
 rather than memorize data.
@@ -19,9 +19,9 @@ rather than memorize data.
 
 ```
 engine/              generic Python: profile, compile, value lookup, training data, scoring
-aq/                  the Swift command line tool (macOS, Apple silicon)
+dbq/                 the Swift command line tool (macOS, Apple silicon)
 training/            MLX LoRA settings and a NaN-guarded trainer
-scripts/             prepare.sh, train.sh, build-aq.sh, evaluate.sh
+scripts/             prepare.sh, train.sh, build-dbq.sh, evaluate.sh
 databases/<name>/    everything about one database:
   catalog.yaml         tables, joins, facts and measures, dimensions, flags, time, settings
   phrasing.yaml        how people ask (question wording, made-up value shapes, weights)
@@ -64,20 +64,20 @@ and one with llama.cpp's `requirements/requirements-convert_hf_to_gguf.txt`.
    This runs `coverage.py` (every column is used or excluded), `compile.py --selftest` (every
    entry compiles and runs), writes `data/catalog.json` and `data/plan.gbnf`, the tests (if
    `tests.py` exists), about 16,000 question/plan pairs, and the MLX chat files.
-4. **Build aq and llama.cpp** (llama.cpp is pinned to tag b11429 and linked statically):
+4. **Build dbq and llama.cpp** (llama.cpp is pinned to tag b11429 and linked statically):
    ```
-   scripts/build-aq.sh databases/mydb
+   scripts/build-dbq.sh databases/mydb
    ```
 5. **Train** (LoRA, 6000 iterations by default; set ITERS to change it):
    ```
    MLX_PY=~/venvs/mlx031/bin/python CONVERT_PY=~/venvs/convert/bin/python scripts/train.sh databases/mydb
    ```
-   The model lands in `~/Library/Application Support/aq/<model_file>`.
-6. **Ask:** `aq/.build/release/aq "your question"`. With `tests.py`, `scripts/evaluate.sh
-   databases/mydb` checks that aq and the Python engine agree and scores the model.
+   The model lands in `~/Library/Application Support/dbq/<model_file>`.
+6. **Ask:** `dbq/.build/release/dbq "your question"`. With `tests.py`, `scripts/evaluate.sh
+   databases/mydb` checks that dbq and the Python engine agree and scores the model.
 
-The catalog is embedded in the binary, so one aq build serves one database; build again for
-another (or put a `catalog.json` in aq's data dir to override it). `aq --help` lists options:
+The catalog is embedded in the binary, so one dbq build serves one database; build again for
+another (or put a `catalog.json` in dbq's data dir to override it). `dbq --help` lists options:
 `-n` prints the SQL only, `-p` shows the plan, `--json` and `--csv` change the output.
 
 ## How a question is answered

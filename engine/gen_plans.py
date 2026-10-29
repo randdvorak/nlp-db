@@ -153,7 +153,7 @@ def pick_group(fact, names):
 
 # ---------------- made-up values ----------------
 # Training never uses the database's own names (customers, products, places...). Filters get
-# invented values, and the "Values:" hint lists them the way aq's live lookup would, so the
+# invented values, and the "Values:" hint lists them the way dbq's live lookup would, so the
 # model learns to copy what the lookup found instead of learning the data. Code words that
 # the catalog itself defines (product line "Mountain", customer type "Store") stay as they are.
 MADE_UP = PH.get("made_up_values", {})

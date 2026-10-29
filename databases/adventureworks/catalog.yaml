@@ -10,17 +10,17 @@
 
 project:
   name: AdventureWorks             # in the system prompt ("questions about the AdventureWorks database")
-  conninfo: dbname=Adventureworks  # aq's default --db; value lookups and the test set
+  conninfo: dbname=Adventureworks  # dbq's default --db; value lookups and the test set
   train_db: adventureworks_shifted # where gen_plans runs its plans (dates moved up to today)
   test_db: adventureworks_shifted  # where scores are computed (relative dates need recent data)
-  model_file: advworx-plans.gguf   # the model aq loads from its data dir
+  model_file: advworx-plans.gguf   # the model dbq loads from its data dir
   schemas: [sales, person, production, purchasing, humanresources]   # what coverage.py checks
 
 # Facts that are lists of things rather than events: preferred for plans with no measures
 # (facts with a `list:` key are added after these).
 entity_facts: [products, customers, employees, vendors]
 
-# How aq's live lookup finds names in a question (values.py).
+# How dbq's live lookup finds names in a question (values.py).
 lookup:
   # Never looked up: the values are the catalog's own words, learned from the wording itself.
   skip: [
@@ -674,7 +674,7 @@ facts:
 
 # Dimensions: things to group by, filter on, or show. `node` is where the column lives;
 # a dimension is usable from any fact whose base reaches that node through the joins.
-# `decode` turns codes into words. No data values live here: aq looks names up in the database
+# `decode` turns codes into words. No data values live here: dbq looks names up in the database
 # when a question is asked. `values` appears only where the catalog's own CASE defines them.
 dimensions:
   # products
@@ -1001,7 +1001,7 @@ time:
 
 
 # The fixed answers for questions the database cannot answer. A plan {"not_tracked": reason}
-# must use one of these; aq rejects a made-up reason and asks the model again for a real query.
+# must use one of these; dbq rejects a made-up reason and asks the model again for a real query.
 not_tracked:
   - "it records salaried or hourly pay, not full-time or part-time status"
   - "it has no employee performance ratings"

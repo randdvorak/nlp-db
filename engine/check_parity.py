@@ -1,7 +1,7 @@
-"""Check that aq's Swift port compiles plans and finds value hints exactly like compile.py and values.py.
+"""Check that dbq's Swift port compiles plans and finds value hints exactly like compile.py and values.py.
 
-  aq --check-file data/plans/valid.jsonl > aq_check.jsonl
-  python3 check_parity.py --project databases/<name> data/plans/valid.jsonl aq_check.jsonl [--db CONNINFO]
+  dbq --check-file data/plans/valid.jsonl > dbq_check.jsonl
+  python3 check_parity.py --project databases/<name> data/plans/valid.jsonl dbq_check.jsonl [--db CONNINFO]
 """
 import json, sys
 import compile as C

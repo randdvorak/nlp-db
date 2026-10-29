@@ -4,8 +4,8 @@ import Foundation
 // MARK: data
 
 let env = ProcessInfo.processInfo.environment
-let dataDir = env["AQ_HOME"].map { URL(fileURLWithPath: $0) }
-    ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/aq")
+let dataDir = env["DBQ_HOME"].map { URL(fileURLWithPath: $0) }
+    ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/dbq")
 
 func dataFile(_ name: String, builtIn: String) -> String {
     (try? String(contentsOf: dataDir.appendingPathComponent(name), encoding: .utf8)) ?? builtIn
@@ -13,13 +13,13 @@ func dataFile(_ name: String, builtIn: String) -> String {
 
 let catalog: Catalog = {
     do { return try Catalog(json: dataFile("catalog.json", builtIn: EmbeddedData.catalog)) } catch {
-        FileHandle.standardError.write("aq: catalog: \(error)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("dbq: catalog: \(error)\n".data(using: .utf8)!)
         exit(2)
     }
 }()
 
 let usage = """
-usage: aq [options] "question about \(catalog.name)"
+usage: dbq [options] "question about \(catalog.name)"
 
 Turns a question into a plan over the \(catalog.name) semantic catalog with the fine-tuned
 model, compiles the plan to one PostgreSQL SELECT, runs it on a read-only connection and
@@ -30,21 +30,21 @@ options:
   -p, --show-plan      print the plan to stderr
   --compile PLAN       compile a plan you wrote (JSON) and run it, no model
   --check-file F.jsonl compile the gold plan of each line and print {sql, prompt} (testing)
-  --print-grammar      print the plan grammar aq builds from its catalog (testing)
+  --print-grammar      print the plan grammar dbq builds from its catalog (testing)
   -q, --show-query     print the SQL to stderr before the results
   --json               rows as JSON: {query, forced, columns, rows, plan}, or {not_tracked, ...}
   --csv                rows as CSV
   --limit N            print at most N rows (default 50 in table output, all otherwise)
-  --db CONNINFO        libpq connection string (default: $AQ_DB, else "\(catalog.conninfo)");
+  --db CONNINFO        libpq connection string (default: $DBQ_DB, else "\(catalog.conninfo)");
                        relative dates like "last month" need data that reaches today
   --grammar            always generate under the grammar (skip the free first attempt)
-  --model PATH         model file (default: $AQ_MODEL, else <data dir>/\(catalog.modelFile))
+  --model PATH         model file (default: $DBQ_MODEL, else <data dir>/\(catalog.modelFile))
   --eval FILE.jsonl    translate every question in a dataset file and print JSON lines (testing)
   -v, --verbose        show llama.cpp logs and why a free attempt was rejected
   --version            print the version
   -h, --help
 
-data dir: $AQ_HOME, else ~/Library/Application Support/aq
+data dir: $DBQ_HOME, else ~/Library/Application Support/dbq
   \(catalog.modelFile)   the plan model
   catalog.json         optional override of the built-in catalog (the grammar is built from it)
 
@@ -52,7 +52,7 @@ exit codes: 0 ok (with or without rows), 1 no valid query, 2 setup, usage or dat
             3 the question can't be answered from the database (e.g. full-time status)
 """
 
-let version = "aq 0.8.0"
+let version = "dbq 0.8.0"
 // The prompt the model was trained with (engine/project.py), carried in the catalog.
 let planSystemPrompt = catalog.systemPrompt
 
@@ -66,7 +66,7 @@ func finish(_ code: Int32) -> Never {
 }
 
 func fail(_ msg: String, code: Int32 = 2) -> Never {
-    FileHandle.standardError.write(("aq: " + msg + "\n").data(using: .utf8)!)
+    FileHandle.standardError.write(("dbq: " + msg + "\n").data(using: .utf8)!)
     finish(code)
 }
 
@@ -79,7 +79,7 @@ func note(_ msg: String) {
 var showPlan = false, planArg: String? = nil, checkFile: String? = nil
 var queryOnly = false, showQuery = false, json = false, csv = false, alwaysGrammar = false, verbose = false
 var limit: Int? = nil
-var conninfo = ProcessInfo.processInfo.environment["AQ_DB"] ?? catalog.conninfo
+var conninfo = ProcessInfo.processInfo.environment["DBQ_DB"] ?? catalog.conninfo
 var modelArg: String? = nil, evalFile: String? = nil, printGrammar = false
 var words = [String]()
 
@@ -123,9 +123,9 @@ let planGrammarNoNotTracked = planGrammar.split(separator: "\n", omittingEmptySu
 
 func loadModel() -> Generator {
     if let g = generator { return g }
-    let path = modelArg ?? env["AQ_MODEL"] ?? dataDir.appendingPathComponent(catalog.modelFile).path
+    let path = modelArg ?? env["DBQ_MODEL"] ?? dataDir.appendingPathComponent(catalog.modelFile).path
     guard FileManager.default.fileExists(atPath: path) else {
-        fail("no model at \(path): copy the plan model there, or pass --model / set AQ_MODEL")
+        fail("no model at \(path): copy the plan model there, or pass --model / set DBQ_MODEL")
     }
     do { generator = try Generator(modelPath: path, verbose: verbose) } catch { fail("\(error)") }
     return generator!
@@ -271,14 +271,14 @@ if let p = planArg {
     (planText, sql, forced) = (r.plan, r.sql, r.forced)
     if let what = planCompiler.notTracked(json: r.plan) {
         if showPlan { note(r.plan) }
-        if forced { note("aq: grammar-forced, please check: the first attempt was not valid") }
+        if forced { note("dbq: grammar-forced, please check: the first attempt was not valid") }
         if json { print(jsonString(["not_tracked": what, "forced": forced, "plan": ["not_tracked": what]])) }
         else { print("Can't answer from the database: \(what).") }
         finish(3)
     }
 }
 if showPlan, let p = planText { note(p) }
-if forced { note("aq: grammar-forced, please check: the first attempt was not valid") }
+if forced { note("dbq: grammar-forced, please check: the first attempt was not valid") }
 
 if queryOnly { print(sql); finish(0) }
 if showQuery { note(sql) }

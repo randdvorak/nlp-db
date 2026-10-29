@@ -446,7 +446,7 @@ final class ValueMatcher {
                 return (dim: d, value: v)
             }
         } catch {
-            FileHandle.standardError.write("aq: value lookup failed (\(error)); no value hints\n".data(using: .utf8)!)
+            FileHandle.standardError.write("dbq: value lookup failed (\(error)); no value hints\n".data(using: .utf8)!)
             return []
         }
     }

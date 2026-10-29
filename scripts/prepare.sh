@@ -10,6 +10,6 @@ cd "$ROOT/engine"
 "$PY" compile.py --selftest --db "$(conninfo TRAIN_DB)"
 "$PY" catalog_json.py
 "$PY" plan_gbnf.py
-[ -f "$AQ_PROJECT/tests.py" ] && "$PY" make_tests.py
+[ -f "$DBQ_PROJECT/tests.py" ] && "$PY" make_tests.py
 "$PY" gen_plans.py ${GEN_ARGS:-}
 "$PY" make_plan_dataset.py

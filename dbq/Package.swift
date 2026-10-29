@@ -1,6 +1,6 @@
 // swift-tools-version:5.9
-// aq: English question -> PostgreSQL SELECT (fine-tuned model via llama.cpp) -> rows (libpq). The database comes from the
-// project catalog embedded at build time (scripts/build-aq.sh databases/<name>).
+// dbq: English question -> PostgreSQL SELECT (fine-tuned model via llama.cpp) -> rows (libpq). The database comes from the
+// project catalog embedded at build time (scripts/build-dbq.sh databases/<name>).
 //
 // llama.cpp is linked statically from vendor/llama (scripts/build-llama.sh, pinned tag).
 // libpq comes from Homebrew (brew install libpq) and is linked dynamically.
@@ -12,13 +12,13 @@ let staticLibs = ["llama", "ggml", "ggml-base", "ggml-cpu", "ggml-metal", "ggml-
 let libpq = "/opt/homebrew/opt/libpq"
 
 let package = Package(
-    name: "aq",
+    name: "dbq",
     platforms: [.macOS(.v14)],
     targets: [
         .systemLibrary(name: "CLlama", path: "Sources/CLlama"),
         .systemLibrary(name: "CLibpq", path: "Sources/CLibpq"),
         .executableTarget(
-            name: "aq",
+            name: "dbq",
             dependencies: ["CLlama", "CLibpq"],
             swiftSettings: [.unsafeFlags(["-Xcc", "-I\(vendor)/include", "-Xcc", "-I\(libpq)/include"])],
             linkerSettings: [

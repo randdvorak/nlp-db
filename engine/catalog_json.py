@@ -1,8 +1,8 @@
-"""catalog.yaml -> data/catalog.json for aq (Swift has no YAML parser). Structure only: no
-data values; aq reads those from the database.
+"""catalog.yaml -> data/catalog.json for dbq (Swift has no YAML parser). Structure only: no
+data values; dbq reads those from the database.
 
 Lists keep their order (fact preference, node order, value order), and decode codes keep
-their type (vendor ratings are numbers, product lines are letters), so aq compiles plans
+their type (vendor ratings are numbers, product lines are letters), so dbq compiles plans
 to the same SQL as compile.py.
 """
 import json
@@ -31,7 +31,7 @@ import compile as C  # noqa: E402  (for ENTITY_FACTS)
 import values as V  # noqa: E402
 
 cat = {
-    # What aq says and where it connects; the system prompt must be the one the model was trained with.
+    # What dbq says and where it connects; the system prompt must be the one the model was trained with.
     "project": {"name": P.NAME, "system_prompt": P.SYSTEM_PROMPT, "conninfo": P.CONNINFO,
                 "model_file": P.SETTINGS.get("model_file", "model.gguf")},
     "nodes": [[a, t] for a, t in CAT["nodes"].items()],
@@ -44,7 +44,7 @@ cat = {
     "periods": CAT["time"]["periods"],
     "entity_facts": C.ENTITY_FACTS,
     "list_nodes": C.LIST_NODES,
-    # Where aq looks values up (no values here): [dim, "db" | "context" | "decode", context words].
+    # Where dbq looks values up (no values here): [dim, "db" | "context" | "decode", context words].
     "lookup": [[d, k, w] for d, k, w in V.lookup_dims()],
     "common_words": sorted(V.COMMON),
     "not_tracked": CAT.get("not_tracked", []),

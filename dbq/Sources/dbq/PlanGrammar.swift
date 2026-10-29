@@ -2,7 +2,7 @@
 /// engine/plan_gbnf.py writes). Only catalog names fit; values are free strings or numbers.
 enum PlanGrammar {
     static let template = #"""
-# Plan grammar, built from the catalog's names (aq builds the same at startup).
+# Plan grammar, built from the catalog's names (dbq builds the same at startup).
 root ::= "{" item ("," item)* "}" | "{\"not_tracked\":" reason "}"
 item ::= "\"measures\":[" measure ("," measure)* "]" | "\"show\":[" dim ("," dim)* "]" | "\"group_by\":[" group ("," group)* "]" | "\"filters\":[" filter ("," filter)* "]" | "\"time\":" time | "\"having\":[" having ("," having)* "]" | "\"order_by\":[" order ("," order)* "]" | "\"limit\":" int
 measure ::= {MEASURES}

@@ -1,9 +1,9 @@
 __pycache__/
 *.pyc
 .DS_Store
-aq/.build/
-aq/vendor/
-aq/Sources/aq/EmbeddedData.swift
+dbq/.build/
+dbq/vendor/
+dbq/Sources/dbq/EmbeddedData.swift
 databases/*/data/
 databases/*/work/
 *.gguf

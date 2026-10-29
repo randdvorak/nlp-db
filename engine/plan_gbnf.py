@@ -2,8 +2,8 @@
 catalog names (measures, dimensions, flags, periods), in the compact JSON the model is
 trained on, or {"not_tracked": "..."} for things the database does not record. Values stay free strings or numbers; the compiler checks the rest.
 
-  python3 plan_gbnf.py --project databases/<name>   # writes data/plan.gbnf (a reference: aq builds its own copy
-                                  # from catalog.json, see PlanGrammar.swift; aq --print-grammar)
+  python3 plan_gbnf.py --project databases/<name>   # writes data/plan.gbnf (a reference: dbq builds its own copy
+                                  # from catalog.json, see PlanGrammar.swift; dbq --print-grammar)
 """
 import project as P
 
@@ -26,7 +26,7 @@ flags = set(CAT["flags"])
 periods = set(CAT["time"]["periods"])
 reasons = set(CAT.get("not_tracked", []))
 
-G = f'''# Plan grammar, built from the catalog's names (aq builds the same at startup).
+G = f'''# Plan grammar, built from the catalog's names (dbq builds the same at startup).
 root ::= "{{" item ("," item)* "}}" | "{{\\"not_tracked\\":" reason "}}"
 item ::= "\\"measures\\":[" measure ("," measure)* "]"
        | "\\"show\\":[" dim ("," dim)* "]"

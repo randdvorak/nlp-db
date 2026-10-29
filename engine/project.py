@@ -1,5 +1,5 @@
 """The database folder the engine works on: `--project DIR` on the command line (taken out of
-sys.argv) or $AQ_PROJECT. It holds
+sys.argv) or $DBQ_PROJECT. It holds
 
   catalog.yaml     the semantic catalog: tables, joins, facts, measures, dimensions, flags,
                    time words, plus `project:` settings (name, system prompt, connections)
@@ -20,9 +20,9 @@ def _find():
         path = sys.argv[i + 1]
         del sys.argv[i:i + 2]
         return path
-    if os.environ.get("AQ_PROJECT"):
-        return os.environ["AQ_PROJECT"]
-    sys.exit("no project: pass --project databases/<name> or set AQ_PROJECT")
+    if os.environ.get("DBQ_PROJECT"):
+        return os.environ["DBQ_PROJECT"]
+    sys.exit("no project: pass --project databases/<name> or set DBQ_PROJECT")
 
 
 DIR = os.path.abspath(_find())
@@ -41,12 +41,12 @@ if not CATALOG:
 PHRASING = _load("phrasing.yaml")
 SETTINGS = CATALOG.get("project", {})
 NAME = SETTINGS.get("name", os.path.basename(DIR))
-# The system prompt is part of what the model was trained on: aq reads the same text from catalog.json.
+# The system prompt is part of what the model was trained on: dbq reads the same text from catalog.json.
 SYSTEM_PROMPT = SETTINGS.get("system_prompt") or (
     f"You translate questions about the {NAME} database into a JSON query plan that uses "
     "only the catalog's measure, dimension, flag and period names. Copy filter values exactly as "
     "listed after 'Values:'. Reply with the plan only.")
-# Where aq and the scripts read values and run tests, and where training plans are run.
+# Where dbq and the scripts read values and run tests, and where training plans are run.
 CONNINFO = SETTINGS.get("conninfo", f"dbname={os.path.basename(DIR)}")
 TRAIN_DB = SETTINGS.get("train_db", CONNINFO)
 TEST_DB = SETTINGS.get("test_db", TRAIN_DB)
